@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
+import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/ui/pages/batches_page.dart';
 import 'package:jk_inventory_system/ui/pages/categories_page.dart';
+import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
+import 'package:jk_inventory_system/ui/pages/outing_stepper_page.dart';
 import 'package:jk_inventory_system/ui/pages/products_page.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
@@ -12,10 +16,14 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.categoryProvider,
     required this.productProvider,
+    required this.stockBatchProvider,
+    required this.outingProvider,
   });
 
   final CategoryProvider categoryProvider;
   final ProductProvider productProvider;
+  final StockBatchProvider stockBatchProvider;
+  final OutingProvider outingProvider;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -48,18 +56,36 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  void _onAddBatch() {
+  Future<void> _onAddBatch() async {
     setState(() => _actionsFabExpanded = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Batch flow starts in Phase 4.')),
+    final created = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => CreateBatchPage(
+          stockBatchProvider: widget.stockBatchProvider,
+          productProvider: widget.productProvider,
+        ),
+      ),
     );
+
+    if (created == true) {
+      await widget.stockBatchProvider.load();
+    }
   }
 
-  void _onStartOuting() {
+  Future<void> _onStartOuting() async {
     setState(() => _actionsFabExpanded = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Outing stepper starts in Phase 5.')),
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => OutingStepperPage(
+          outingProvider: widget.outingProvider,
+          productProvider: widget.productProvider,
+        ),
+      ),
     );
+
+    if (submitted == true) {
+      await widget.outingProvider.load();
+    }
   }
 
   Future<void> _onManageCategories() async {
@@ -81,7 +107,10 @@ class _HomeShellState extends State<HomeShell> {
         productProvider: widget.productProvider,
         categoryProvider: widget.categoryProvider,
       ),
-      const BatchesPage(),
+      BatchesPage(
+        stockBatchProvider: widget.stockBatchProvider,
+        productProvider: widget.productProvider,
+      ),
     ];
 
     return Scaffold(

@@ -220,30 +220,30 @@ Open menu/speed dial with actions:
 - [x] Add product list UI with category chips/color.
 
 ## Phase 4 - Batch In Flow
-- [ ] Create StockBatch and BatchItem models + adapters.
-- [ ] Create batch naming utility `Batch_MM_DD_YYYY-UID`.
-- [ ] Build multi-item batch creation UI:
-  - [ ] Choose product
-  - [ ] Enter price
-  - [ ] Choose unit (`quantity` or `kilo`)
-  - [ ] Enter value
-  - [ ] Add/remove row
-- [ ] Save batch + generate inventory ledger entries.
-- [ ] Build Batch List & History page.
-- [ ] Build batch detail page.
+- [x] Create StockBatch and BatchItem models + adapters.
+- [x] Create batch naming utility `Batch_MM_DD_YYYY-UID`.
+- [x] Build multi-item batch creation UI:
+  - [x] Choose product
+  - [x] Enter price
+  - [x] Choose unit (`quantity` or `kilo`)
+  - [x] Enter value
+  - [x] Add/remove row
+- [x] Save batch + generate inventory ledger entries.
+- [x] Build Batch List & History page.
+- [x] Build batch detail page.
 
 ## Phase 5 - Outing Stepper Flow
-- [ ] Create OutingRecord + OutingLine models + adapters.
-- [ ] Build 6-step stepper:
-  - [ ] Collect Displayed Products
-  - [ ] Returned Product Today
-  - [ ] Discarded Products
-  - [ ] Returned Discarded Products
-  - [ ] Review User Inputs
-  - [ ] Calculation
-- [ ] Add all stock bound validations at each step.
-- [ ] On submit, write ledger movements and update computed stock.
-- [ ] Save outing history by date.
+- [x] Create OutingRecord + OutingLine models + adapters.
+- [x] Build 6-step stepper:
+  - [x] Collect Displayed Products
+  - [x] Returned Product Today
+  - [x] Discarded Products
+  - [x] Returned Discarded Products
+  - [x] Review User Inputs
+  - [x] Calculation
+- [x] Add all stock bound validations at each step.
+- [x] On submit, write ledger movements and update computed stock.
+- [x] Save outing history by date.
 
 ## Phase 6 - Inventory Computation Engine
 - [ ] Implement stock calculator from ledger events.

@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart' hide Category;
+import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/category.dart';
+import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/category_repository.dart';
 
 class CategoryProvider extends ChangeNotifier {
-  CategoryProvider(this._repository);
+  CategoryProvider(this._repository, this._activityLogProvider);
 
   final CategoryRepository _repository;
+  final ActivityLogProvider _activityLogProvider;
   final _uuid = const Uuid();
 
   List<Category> _items = [];
@@ -34,7 +37,10 @@ class CategoryProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<String?> create({required String name, required String colorHex}) async {
+  Future<String?> create({
+    required String name,
+    required String colorHex,
+  }) async {
     final error = validateName(name);
     if (error != null) return error;
 
@@ -48,6 +54,12 @@ class CategoryProvider extends ChangeNotifier {
     );
 
     await _repository.create(category);
+    await _activityLogProvider.log(
+      actionType: ActivityActionType.categoryCreated,
+      title: 'Category created',
+      description: 'Created category "${category.name}".',
+      referenceId: category.id,
+    );
     await load();
     return null;
   }
@@ -61,12 +73,17 @@ class CategoryProvider extends ChangeNotifier {
     if (error != null) return error;
 
     final current = _items.firstWhere((item) => item.id == id);
-    await _repository.update(
-      current.copyWith(
-        name: name.trim(),
-        colorHex: colorHex,
-        updatedAt: DateTime.now(),
-      ),
+    final updated = current.copyWith(
+      name: name.trim(),
+      colorHex: colorHex,
+      updatedAt: DateTime.now(),
+    );
+    await _repository.update(updated);
+    await _activityLogProvider.log(
+      actionType: ActivityActionType.categoryUpdated,
+      title: 'Category updated',
+      description: 'Updated category "${updated.name}".',
+      referenceId: updated.id,
     );
     await load();
     return null;
@@ -77,7 +94,14 @@ class CategoryProvider extends ChangeNotifier {
   }
 
   Future<void> delete(String id) async {
+    final category = _items.firstWhere((item) => item.id == id);
     await _repository.delete(id);
+    await _activityLogProvider.log(
+      actionType: ActivityActionType.categoryDeleted,
+      title: 'Category deleted',
+      description: 'Deleted category "${category.name}".',
+      referenceId: id,
+    );
     await load();
   }
 }

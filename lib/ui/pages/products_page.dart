@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
+import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
@@ -9,10 +11,12 @@ class ProductsPage extends StatelessWidget {
     super.key,
     required this.productProvider,
     required this.categoryProvider,
+    required this.outingProvider,
   });
 
   final ProductProvider productProvider;
   final CategoryProvider categoryProvider;
+  final OutingProvider outingProvider;
 
   Future<void> _confirmDelete(BuildContext context, String productId) async {
     final shouldDelete = await showDialog<bool>(
@@ -41,7 +45,11 @@ class ProductsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([productProvider, categoryProvider]),
+      animation: Listenable.merge([
+        productProvider,
+        categoryProvider,
+        outingProvider,
+      ]),
       builder: (context, _) {
         final products = productProvider.items;
         final categories = categoryProvider.items;
@@ -71,9 +79,14 @@ class ProductsPage extends StatelessWidget {
 
             return ListTile(
               title: Text(product.name),
-              subtitle: category == null
-                  ? const Text('No category')
-                  : Row(
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (category == null)
+                    const Text('No category')
+                  else
+                    Row(
                       children: [
                         Container(
                           width: 12,
@@ -87,6 +100,12 @@ class ProductsPage extends StatelessWidget {
                         Text(category.name),
                       ],
                     ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'In stock • Qty: ${outingProvider.currentStock(product.id, UnitType.quantity).toStringAsFixed(2)} • Kilo: ${outingProvider.currentStock(product.id, UnitType.kilo).toStringAsFixed(2)}',
+                  ),
+                ],
+              ),
               trailing: Wrap(
                 spacing: 4,
                 children: [
@@ -94,11 +113,11 @@ class ProductsPage extends StatelessWidget {
                     onPressed: categories.isEmpty
                         ? null
                         : () => showProductFormSheet(
-                              context,
-                              provider: productProvider,
-                              categories: categories,
-                              editing: product,
-                            ),
+                            context,
+                            provider: productProvider,
+                            categories: categories,
+                            editing: product,
+                          ),
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(

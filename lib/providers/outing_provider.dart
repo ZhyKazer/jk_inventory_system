@@ -1,22 +1,30 @@
 import 'package:flutter/foundation.dart';
+import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
+import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
+import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/outing_repository.dart';
+import 'package:jk_inventory_system/services/inventory_stock_calculator.dart';
 
-enum OutingStepType {
-  displayed,
-  returned,
-  discarded,
-  replaced,
-}
+enum OutingStepType { displayed, returned, discarded, replaced }
 
 class OutingProvider extends ChangeNotifier {
-  OutingProvider(this._repository, this._getBatches);
+  OutingProvider(
+    this._repository,
+    this._getBatches,
+    this._getProducts,
+    this._activityLogProvider,
+  );
 
   final OutingRepository _repository;
   final List<StockBatch> Function() _getBatches;
+  final List<Product> Function() _getProducts;
+  final ActivityLogProvider _activityLogProvider;
+  final InventoryStockCalculator _stockCalculator =
+      const InventoryStockCalculator();
   final _uuid = const Uuid();
 
   List<OutingRecord> _history = [];
@@ -44,8 +52,6 @@ class OutingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _lineKey(OutingLine line) => '${line.productId}_${line.unitType.index}';
-
   double _sumLines(
     List<OutingLine> lines,
     String productId,
@@ -60,53 +66,67 @@ class OutingProvider extends ChangeNotifier {
     return total;
   }
 
-  double _sumMap(Map<String, double> map, String productId, UnitType unitType) {
-    return map['${productId}_${unitType.index}'] ?? 0;
+  double currentStock(String productId, UnitType unitType) {
+    return _stockCalculator.currentStock(
+      productId: productId,
+      unitType: unitType,
+      batches: _getBatches(),
+      outings: _history,
+    );
   }
 
-  Map<String, double> _historicalTotals(List<OutingLine> Function(OutingRecord) pick) {
-    final result = <String, double>{};
-    for (final record in _history.where((item) => item.status == OutingStatus.submitted)) {
-      for (final line in pick(record)) {
-        final key = _lineKey(line);
-        result[key] = (result[key] ?? 0) + line.value;
-      }
-    }
-    return result;
+  double displayedLimit(String productId, UnitType unitType, DateTime date) {
+    return _stockCalculator.displayedLimit(
+      productId: productId,
+      unitType: unitType,
+      date: date,
+      batches: _getBatches(),
+      outings: _history,
+    );
+  }
+
+  double discardedLimit(String productId, UnitType unitType, DateTime date) {
+    return _stockCalculator.discardedLimit(
+      productId: productId,
+      unitType: unitType,
+      date: date,
+      batches: _getBatches(),
+      outings: _history,
+    );
+  }
+
+  double _draftNetChange(String productId, UnitType unitType) {
+    final displayed = _sumLines(_displayedDraft, productId, unitType);
+    final returned = _sumLines(_returnedDraft, productId, unitType);
+    final discarded = _sumLines(_discardedDraft, productId, unitType);
+    final replaced = _sumLines(_replacedDraft, productId, unitType);
+    return -displayed + returned - discarded + replaced;
   }
 
   double availableStock(String productId, UnitType unitType) {
-    var batchIn = 0.0;
-    for (final batch in _getBatches()) {
-      for (final item in batch.items) {
-        if (item.productId == productId && item.unitType == unitType) {
-          batchIn += item.unitValue;
-        }
-      }
-    }
+    return currentStock(productId, unitType) +
+        _draftNetChange(productId, unitType);
+  }
 
-    final displayed = _sumMap(
-      _historicalTotals((record) => record.displayedProducts),
-      productId,
-      unitType,
-    );
-    final returned = _sumMap(
-      _historicalTotals((record) => record.returnedProducts),
-      productId,
-      unitType,
-    );
-    final discarded = _sumMap(
-      _historicalTotals((record) => record.discardedProducts),
-      productId,
-      unitType,
-    );
-    final replaced = _sumMap(
-      _historicalTotals((record) => record.replacedDiscardedProducts),
-      productId,
-      unitType,
-    );
+  double returnedRemainingFor(String productId, UnitType unitType) {
+    final displayed = _sumLines(_displayedDraft, productId, unitType);
+    final returned = _sumLines(_returnedDraft, productId, unitType);
+    final remaining = displayed - returned;
+    return remaining > 0 ? remaining : 0;
+  }
 
-    return batchIn - displayed + returned - discarded + replaced;
+  double soldFor(String productId, UnitType unitType) {
+    final displayed = _sumLines(_displayedDraft, productId, unitType);
+    final returned = _sumLines(_returnedDraft, productId, unitType);
+    final sold = displayed - returned;
+    return sold > 0 ? sold : 0;
+  }
+
+  double discardedRemainingFor(String productId, UnitType unitType) {
+    final discarded = _sumLines(_discardedDraft, productId, unitType);
+    final replaced = _sumLines(_replacedDraft, productId, unitType);
+    final remaining = discarded - replaced;
+    return remaining > 0 ? remaining : 0;
   }
 
   double batchStockFor(String productId, UnitType unitType) {
@@ -163,13 +183,12 @@ class OutingProvider extends ChangeNotifier {
       return 'Displayed requires existing stock from batches.';
     }
 
-    final current = _sumLines(_displayedDraft, line.productId, line.unitType);
-    final max = availableStock(line.productId, line.unitType);
-    if (max <= 0) {
+    final currentLimit = availableStock(line.productId, line.unitType);
+    if (currentLimit <= 0) {
       return 'No available stock to display for this product.';
     }
-    if (current + line.value > max) {
-      return 'Displayed cannot exceed available stock (${max.toStringAsFixed(2)}).';
+    if (line.value > currentLimit) {
+      return 'Displayed cannot exceed available stock (${currentLimit.toStringAsFixed(2)}).';
     }
 
     _displayedDraft = [..._displayedDraft, line];
@@ -178,11 +197,13 @@ class OutingProvider extends ChangeNotifier {
   }
 
   String? _addReturned(OutingLine line) {
-    final displayed = _sumLines(_displayedDraft, line.productId, line.unitType);
-    final currentReturned = _sumLines(_returnedDraft, line.productId, line.unitType);
+    final remaining = returnedRemainingFor(line.productId, line.unitType);
+    if (remaining <= 0) {
+      return 'No displayed amount left to return for this product.';
+    }
 
-    if (currentReturned + line.value > displayed) {
-      return 'Returned cannot exceed displayed amount (${displayed.toStringAsFixed(2)}).';
+    if (line.value > remaining) {
+      return 'Returned cannot exceed remaining displayed amount (${remaining.toStringAsFixed(2)}).';
     }
 
     _returnedDraft = [..._returnedDraft, line];
@@ -191,16 +212,13 @@ class OutingProvider extends ChangeNotifier {
   }
 
   String? _addDiscarded(OutingLine line) {
-    final available = availableStock(line.productId, line.unitType);
-    if (available <= 0) {
+    final currentLimit = availableStock(line.productId, line.unitType);
+    if (currentLimit <= 0) {
       return 'No available stock to discard for this product.';
     }
 
-    final max = available;
-    final currentDiscarded = _sumLines(_discardedDraft, line.productId, line.unitType);
-
-    if (currentDiscarded + line.value > max) {
-      return 'Discarded cannot exceed stock limit (${max.toStringAsFixed(2)}).';
+    if (line.value > currentLimit) {
+      return 'Discarded cannot exceed stock limit (${currentLimit.toStringAsFixed(2)}).';
     }
 
     _discardedDraft = [..._discardedDraft, line];
@@ -209,11 +227,13 @@ class OutingProvider extends ChangeNotifier {
   }
 
   String? _addReplaced(OutingLine line) {
-    final discarded = _sumLines(_discardedDraft, line.productId, line.unitType);
-    final currentReplaced = _sumLines(_replacedDraft, line.productId, line.unitType);
+    final remaining = discardedRemainingFor(line.productId, line.unitType);
 
-    if (currentReplaced + line.value > discarded) {
-      return 'Replaced cannot exceed discarded amount (${discarded.toStringAsFixed(2)}).';
+    if (remaining <= 0) {
+      return 'No discarded amount left to replace for this product.';
+    }
+    if (line.value > remaining) {
+      return 'Replaced cannot exceed remaining discarded amount (${remaining.toStringAsFixed(2)}).';
     }
 
     _replacedDraft = [..._replacedDraft, line];
@@ -255,7 +275,61 @@ class OutingProvider extends ChangeNotifier {
       submittedAt: now,
     );
 
+    // Calculate totals
+    final products = _getProducts();
+    double totalDisplayed = 0;
+    double totalReturned = 0;
+    double totalDiscarded = 0;
+    double totalReplaced = 0;
+    double totalSold = 0;
+    double totalProfit = 0;
+    double totalLost = 0;
+
+    final allLines = [
+      ..._displayedDraft,
+      ..._returnedDraft,
+      ..._discardedDraft,
+      ..._replacedDraft,
+    ];
+
+    Product? firstProduct;
+    for (final line in allLines) {
+      final product = products.firstWhere((p) => p.id == line.productId);
+      if (firstProduct == null) firstProduct = product;
+      final value = line.value;
+      if (_displayedDraft.contains(line)) {
+        totalDisplayed += value;
+      } else if (_returnedDraft.contains(line)) {
+        totalReturned += value;
+      } else if (_discardedDraft.contains(line)) {
+        totalDiscarded += value;
+        totalLost += product.costPrice * value;
+      } else if (_replacedDraft.contains(line)) {
+        totalReplaced += value;
+      }
+    }
+
+    totalSold = totalDisplayed - totalReturned + totalReplaced;
+    if (firstProduct != null) {
+      totalProfit =
+          totalSold * (firstProduct.sellingPrice - firstProduct.costPrice);
+    }
+
     await _repository.create(record);
+    await _activityLogProvider.log(
+      actionType: ActivityActionType.outingSubmitted,
+      title: 'Outing submitted',
+      description:
+          'Submitted outing for ${record.date.toIso8601String().split('T').first} with ${record.displayedProducts.length} displayed line(s).',
+      referenceId: record.id,
+      displayed: totalDisplayed,
+      returned: totalReturned,
+      discarded: totalDiscarded,
+      replaced: totalReplaced,
+      sold: totalSold,
+      profit: totalProfit,
+      lost: totalLost,
+    );
     await load();
     startDraft();
     return null;

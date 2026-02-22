@@ -75,11 +75,25 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     setState(() => _isSubmitting = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
     Navigator.of(context).pop(true);
+  }
+
+  void _goNextStep() {
+    setState(() {
+      if (_currentStep == 0) {
+        _returnedUnit = _displayedUnit;
+      }
+      if (_currentStep == 2) {
+        _replacedUnit = _discardedUnit;
+      }
+      _currentStep += 1;
+    });
   }
 
   bool _addLine({
@@ -101,7 +115,9 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     );
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return false;
     }
 
@@ -110,7 +126,9 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
   }
 
   String _productName(String productId) {
-    final product = widget.productProvider.items.where((p) => p.id == productId);
+    final product = widget.productProvider.items.where(
+      (p) => p.id == productId,
+    );
     if (product.isEmpty) return 'Unknown Product';
     return product.first.name;
   }
@@ -121,7 +139,9 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     UnitType unitType,
   ) {
     for (final line in lines) {
-      if (line.productId == productId && line.unitType == unitType && line.value > 0) {
+      if (line.productId == productId &&
+          line.unitType == unitType &&
+          line.value > 0) {
         return true;
       }
     }
@@ -131,6 +151,59 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
   bool _canDisplayProduct(Product product, UnitType unitType) {
     return widget.outingProvider.batchStockFor(product.id, unitType) > 0 &&
         widget.outingProvider.availableStock(product.id, unitType) > 0;
+  }
+
+  double _sumLines(
+    List<OutingLine> lines,
+    String productId,
+    UnitType unitType,
+  ) {
+    var total = 0.0;
+    for (final line in lines) {
+      if (line.productId == productId && line.unitType == unitType) {
+        total += line.value;
+      }
+    }
+    return total;
+  }
+
+  Widget _buildBalanceBasisCard({
+    required String title,
+    required List<Product> products,
+    required UnitType unitType,
+    required List<OutingLine> baseLines,
+    required List<OutingLine> consumedLines,
+    required String baseLabel,
+    required String consumedLabel,
+    required String remainingLabel,
+  }) {
+    if (products.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          for (final product in products)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '• ${product.name} (${unitType.label}) • $baseLabel: ${_sumLines(baseLines, product.id, unitType).toStringAsFixed(2)} • $consumedLabel: ${_sumLines(consumedLines, product.id, unitType).toStringAsFixed(2)} • $remainingLabel: ${(_sumLines(baseLines, product.id, unitType) - _sumLines(consumedLines, product.id, unitType)).clamp(0, 999999).toStringAsFixed(2)}',
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -187,7 +260,9 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.all(16),
@@ -196,9 +271,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
                     children: [
                       Text(
                         currentMeta.title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -242,7 +316,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
                         child: FilledButton(
                           onPressed: isLastStep
                               ? (_isSubmitting ? null : _submit)
-                              : () => setState(() => _currentStep += 1),
+                              : _goNextStep,
                           child: Text(
                             isLastStep
                                 ? (_isSubmitting ? 'Submitting...' : 'Submit')
@@ -264,27 +338,31 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
   Widget _buildStepContent(List<Product> products) {
     final displayedProductsForReturned = products
         .where(
-          (product) => _hasDraftForUnit(
-            widget.outingProvider.displayedDraft,
-            product.id,
-            _returnedUnit,
-          ),
+          (product) =>
+              widget.outingProvider.returnedRemainingFor(
+                product.id,
+                _returnedUnit,
+              ) >
+              0,
         )
         .toList();
     final discardedProductsForReplaced = products
         .where(
-          (product) => _hasDraftForUnit(
-            widget.outingProvider.discardedDraft,
-            product.id,
-            _replacedUnit,
-          ),
+          (product) =>
+              widget.outingProvider.discardedRemainingFor(
+                product.id,
+                _replacedUnit,
+              ) >
+              0,
         )
         .toList();
     final discardedStockProducts = products
         .where(
           (product) =>
-              widget.outingProvider.batchStockFor(product.id, _discardedUnit) > 0 &&
-              widget.outingProvider.availableStock(product.id, _discardedUnit) > 0,
+              widget.outingProvider.batchStockFor(product.id, _discardedUnit) >
+                  0 &&
+              widget.outingProvider.availableStock(product.id, _discardedUnit) >
+                  0,
         )
         .toList();
 
@@ -306,35 +384,48 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
             unitType: _displayedUnit,
             value: value,
           ),
-          onRemoveLine: (index) => widget.outingProvider.removeLine(
-            OutingStepType.displayed,
-            index,
-          ),
+          onRemoveLine: (index) =>
+              widget.outingProvider.removeLine(OutingStepType.displayed, index),
           helperText:
               'Only products with available stock from batches can be displayed.',
           emptyProductsMessage:
               'No products with available batch stock for this unit. Add stock via batches first.',
         );
       case 1:
-        return _StepLineEntry(
-          products: displayedProductsForReturned,
-          unitType: _returnedUnit,
-          lines: widget.outingProvider.returnedDraft,
-          productName: _productName,
-          onUnitChanged: (value) => setState(() => _returnedUnit = value),
-          onAdd: (productId, value) => _addLine(
-            step: OutingStepType.returned,
-            productId: productId,
-            unitType: _returnedUnit,
-            value: value,
-          ),
-          onRemoveLine: (index) => widget.outingProvider.removeLine(
-            OutingStepType.returned,
-            index,
-          ),
-          helperText: 'Returned must not exceed displayed amount per product.',
-          emptyProductsMessage:
-              'No displayed products yet. Add products in step 1 first.',
+        return Column(
+          children: [
+            _buildBalanceBasisCard(
+              title: 'Displayed / Returned / Remaining (Sold if not returned)',
+              products: displayedProductsForReturned,
+              unitType: _returnedUnit,
+              baseLines: widget.outingProvider.displayedDraft,
+              consumedLines: widget.outingProvider.returnedDraft,
+              baseLabel: 'Displayed',
+              consumedLabel: 'Returned',
+              remainingLabel: 'Remaining',
+            ),
+            _StepLineEntry(
+              products: displayedProductsForReturned,
+              unitType: _returnedUnit,
+              lines: widget.outingProvider.returnedDraft,
+              productName: _productName,
+              onUnitChanged: (value) => setState(() => _returnedUnit = value),
+              onAdd: (productId, value) => _addLine(
+                step: OutingStepType.returned,
+                productId: productId,
+                unitType: _returnedUnit,
+                value: value,
+              ),
+              onRemoveLine: (index) => widget.outingProvider.removeLine(
+                OutingStepType.returned,
+                index,
+              ),
+              helperText:
+                  'Returned is based on remaining displayed amount from step 1.',
+              emptyProductsMessage:
+                  'No displayed amount left to return. Add displayed entries in step 1 first.',
+            ),
+          ],
         );
       case 2:
         return _StepLineEntry(
@@ -349,34 +440,47 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
             unitType: _discardedUnit,
             value: value,
           ),
-          onRemoveLine: (index) => widget.outingProvider.removeLine(
-            OutingStepType.discarded,
-            index,
-          ),
-            helperText: 'Discarded comes directly from available stock.',
+          onRemoveLine: (index) =>
+              widget.outingProvider.removeLine(OutingStepType.discarded, index),
+          helperText: 'Discarded comes directly from available stock.',
           emptyProductsMessage:
               'No products currently have available stock to discard.',
         );
       case 3:
-        return _StepLineEntry(
-          products: discardedProductsForReplaced,
-          unitType: _replacedUnit,
-          lines: widget.outingProvider.replacedDraft,
-          productName: _productName,
-          onUnitChanged: (value) => setState(() => _replacedUnit = value),
-          onAdd: (productId, value) => _addLine(
-            step: OutingStepType.replaced,
-            productId: productId,
-            unitType: _replacedUnit,
-            value: value,
-          ),
-          onRemoveLine: (index) => widget.outingProvider.removeLine(
-            OutingStepType.replaced,
-            index,
-          ),
-          helperText: 'Replacement must not exceed total discarded amount.',
-          emptyProductsMessage:
-              'No discarded products yet. Add discarded items in step 3 first.',
+        return Column(
+          children: [
+            _buildBalanceBasisCard(
+              title: 'Discarded / Replaced / Remaining Discarded',
+              products: discardedProductsForReplaced,
+              unitType: _replacedUnit,
+              baseLines: widget.outingProvider.discardedDraft,
+              consumedLines: widget.outingProvider.replacedDraft,
+              baseLabel: 'Discarded',
+              consumedLabel: 'Replaced',
+              remainingLabel: 'Remaining',
+            ),
+            _StepLineEntry(
+              products: discardedProductsForReplaced,
+              unitType: _replacedUnit,
+              lines: widget.outingProvider.replacedDraft,
+              productName: _productName,
+              onUnitChanged: (value) => setState(() => _replacedUnit = value),
+              onAdd: (productId, value) => _addLine(
+                step: OutingStepType.replaced,
+                productId: productId,
+                unitType: _replacedUnit,
+                value: value,
+              ),
+              onRemoveLine: (index) => widget.outingProvider.removeLine(
+                OutingStepType.replaced,
+                index,
+              ),
+              helperText:
+                  'Replacement is based on remaining discarded amount from step 3.',
+              emptyProductsMessage:
+                  'No discarded amount left. Add discarded items in step 3 first.',
+            ),
+          ],
         );
       default:
         return _ReviewSection(
@@ -429,8 +533,8 @@ class _WizardProgressHeader extends StatelessWidget {
                     color: index < currentStep
                         ? colorScheme.primary
                         : (index == currentStep
-                            ? colorScheme.primaryContainer
-                            : colorScheme.surfaceContainerHighest),
+                              ? colorScheme.primaryContainer
+                              : colorScheme.surfaceContainerHighest),
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: index == currentStep
@@ -462,8 +566,9 @@ class _WizardProgressHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontWeight:
-                        index == currentStep ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: index == currentStep
+                        ? FontWeight.w700
+                        : FontWeight.w500,
                     color: index == currentStep
                         ? colorScheme.primary
                         : colorScheme.onSurfaceVariant,
@@ -531,9 +636,13 @@ class _StepLineEntryState extends State<_StepLineEntry> {
   }
 
   void _syncSelectedProduct() {
-    final hasCurrent = widget.products.any((item) => item.id == _selectedProductId);
+    final hasCurrent = widget.products.any(
+      (item) => item.id == _selectedProductId,
+    );
     if (!hasCurrent) {
-      _selectedProductId = widget.products.isNotEmpty ? widget.products.first.id : null;
+      _selectedProductId = widget.products.isNotEmpty
+          ? widget.products.first.id
+          : null;
     }
   }
 
@@ -578,14 +687,8 @@ class _StepLineEntryState extends State<_StepLineEntry> {
         const SizedBox(height: 8),
         SegmentedButton<UnitType>(
           segments: const [
-            ButtonSegment(
-              value: UnitType.quantity,
-              label: Text('Quantity'),
-            ),
-            ButtonSegment(
-              value: UnitType.kilo,
-              label: Text('Kilo'),
-            ),
+            ButtonSegment(value: UnitType.quantity, label: Text('Quantity')),
+            ButtonSegment(value: UnitType.kilo, label: Text('Kilo')),
           ],
           selected: {widget.unitType},
           onSelectionChanged: (values) => widget.onUnitChanged(values.first),
@@ -610,7 +713,9 @@ class _StepLineEntryState extends State<_StepLineEntry> {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
             ),
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -641,16 +746,19 @@ class _StepLineEntryState extends State<_StepLineEntry> {
                     IconButton.filledTonal(
                       onPressed: () => _adjustValue(-1),
                       icon: const Icon(Icons.remove),
-                      constraints:
-                          const BoxConstraints.tightFor(width: 48, height: 48),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: TextField(
                         controller: _valueController,
                         textAlign: TextAlign.center,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         decoration: InputDecoration(
                           labelText: widget.unitType.label,
                           border: const OutlineInputBorder(),
@@ -661,12 +769,16 @@ class _StepLineEntryState extends State<_StepLineEntry> {
                     IconButton.filledTonal(
                       onPressed: () => _adjustValue(1),
                       icon: const Icon(Icons.add),
-                      constraints:
-                          const BoxConstraints.tightFor(width: 48, height: 48),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     FilledButton(
-                      onPressed: _selectedProductId == null ? null : _addProductLine,
+                      onPressed: _selectedProductId == null
+                          ? null
+                          : _addProductLine,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(76, 48),
                       ),
@@ -722,6 +834,40 @@ class _ReviewSection extends StatelessWidget {
   final List<OutingLine> discarded;
   final List<OutingLine> replaced;
 
+  List<OutingLine> _soldLines() {
+    final displayedMap = <String, OutingLine>{};
+    for (final line in displayed) {
+      final key = '${line.productId}_${line.unitType.index}';
+      final existing = displayedMap[key];
+      if (existing == null) {
+        displayedMap[key] = OutingLine(
+          productId: line.productId,
+          unitType: line.unitType,
+          value: line.value,
+        );
+      } else {
+        displayedMap[key] = OutingLine(
+          productId: existing.productId,
+          unitType: existing.unitType,
+          value: existing.value + line.value,
+        );
+      }
+    }
+
+    for (final line in returned) {
+      final key = '${line.productId}_${line.unitType.index}';
+      final existing = displayedMap[key];
+      if (existing == null) continue;
+      displayedMap[key] = OutingLine(
+        productId: existing.productId,
+        unitType: existing.unitType,
+        value: existing.value - line.value,
+      );
+    }
+
+    return displayedMap.values.where((line) => line.value > 0).toList();
+  }
+
   Widget _section(BuildContext context, String title, List<OutingLine> lines) {
     if (lines.isEmpty) {
       return Container(
@@ -764,11 +910,14 @@ class _ReviewSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sold = _soldLines();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _section(context, 'Displayed', displayed),
         _section(context, 'Returned', returned),
+        _section(context, 'Sold (Displayed - Returned)', sold),
         _section(context, 'Discarded', discarded),
         _section(context, 'Replaced', replaced),
       ],

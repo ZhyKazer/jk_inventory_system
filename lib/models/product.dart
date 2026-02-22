@@ -5,6 +5,8 @@ class Product {
     required this.id,
     required this.categoryId,
     required this.name,
+    this.costPrice = 0.0,
+    this.sellingPrice = 0.0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -12,6 +14,8 @@ class Product {
   final String id;
   final String categoryId;
   final String name;
+  final double costPrice;
+  final double sellingPrice;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -19,6 +23,8 @@ class Product {
     String? id,
     String? categoryId,
     String? name,
+    double? costPrice,
+    double? sellingPrice,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -26,6 +32,8 @@ class Product {
       id: id ?? this.id,
       categoryId: categoryId ?? this.categoryId,
       name: name ?? this.name,
+      costPrice: costPrice ?? this.costPrice,
+      sellingPrice: sellingPrice ?? this.sellingPrice,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -38,13 +46,31 @@ class ProductAdapter extends TypeAdapter<Product> {
 
   @override
   Product read(BinaryReader reader) {
+    final id = reader.readString();
+    final categoryId = reader.readString();
+    final name = reader.readString();
+    final costPrice = _readDouble(reader, fallback: 0.0);
+    final sellingPrice = _readDouble(reader, fallback: 0.0);
+    final createdAt = DateTime.fromMillisecondsSinceEpoch(reader.readInt());
+    final updatedAt = DateTime.fromMillisecondsSinceEpoch(reader.readInt());
+
     return Product(
-      id: reader.readString(),
-      categoryId: reader.readString(),
-      name: reader.readString(),
-      createdAt: DateTime.fromMillisecondsSinceEpoch(reader.readInt()),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(reader.readInt()),
+      id: id,
+      categoryId: categoryId,
+      name: name,
+      costPrice: costPrice,
+      sellingPrice: sellingPrice,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
     );
+  }
+
+  double _readDouble(BinaryReader reader, {double fallback = 0.0}) {
+    try {
+      return reader.readDouble();
+    } catch (_) {
+      return fallback;
+    }
   }
 
   @override
@@ -53,6 +79,8 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeString(obj.id)
       ..writeString(obj.categoryId)
       ..writeString(obj.name)
+      ..writeDouble(obj.costPrice)
+      ..writeDouble(obj.sellingPrice)
       ..writeInt(obj.createdAt.millisecondsSinceEpoch)
       ..writeInt(obj.updatedAt.millisecondsSinceEpoch);
   }

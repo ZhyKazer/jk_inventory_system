@@ -246,21 +246,21 @@ Open menu/speed dial with actions:
 - [x] Save outing history by date.
 
 ## Phase 6 - Inventory Computation Engine
-- [ ] Implement stock calculator from ledger events.
-- [ ] Support both unit types (`quantity`, `kilo`) safely.
-- [ ] Prevent cross-unit math for same product unless explicitly handled.
-- [ ] Expose helper methods:
-  - [ ] currentStock(productId, unitType)
-  - [ ] displayedLimit(productId, date)
-  - [ ] discardedLimit(productId, date)
+- [x] Implement stock calculator from ledger events.
+- [x] Support both unit types (`quantity`, `kilo`) safely.
+- [x] Prevent cross-unit math for same product unless explicitly handled.
+- [x] Expose helper methods:
+  - [x] currentStock(productId, unitType)
+  - [x] displayedLimit(productId, date)
+  - [x] discardedLimit(productId, date)
 
 ## Phase 7 - Activity Log
-- [ ] Create ActivityLog model + Hive adapter.
-- [ ] Create activity logger service for write-on-event behavior.
-- [ ] Add log hooks to Category/Product CRUD operations.
-- [ ] Add log hook when batch is created.
-- [ ] Add log hook when outing is submitted.
-- [ ] Build Activity Log page (latest first, read-only).
+- [x] Create ActivityLog model + Hive adapter.
+- [x] Create activity logger service for write-on-event behavior.
+- [x] Add log hooks to Category/Product CRUD operations.
+- [x] Add log hook when batch is created.
+- [x] Add log hook when outing is submitted.
+- [x] Build Activity Log page (latest first, read-only).
 
 ## Phase 8 - UX Hardening
 - [ ] Empty states for all list pages.

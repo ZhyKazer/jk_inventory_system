@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
+import 'package:jk_inventory_system/ui/pages/activity_log_page.dart';
 import 'package:jk_inventory_system/ui/pages/batches_page.dart';
 import 'package:jk_inventory_system/ui/pages/categories_page.dart';
 import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
@@ -18,8 +20,10 @@ class HomeShell extends StatefulWidget {
     required this.productProvider,
     required this.stockBatchProvider,
     required this.outingProvider,
+    required this.activityLogProvider,
   });
 
+  final ActivityLogProvider activityLogProvider;
   final CategoryProvider categoryProvider;
   final ProductProvider productProvider;
   final StockBatchProvider stockBatchProvider;
@@ -50,10 +54,7 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _onAddCategory() async {
     setState(() => _actionsFabExpanded = false);
-    await showCategoryFormSheet(
-      context,
-      provider: widget.categoryProvider,
-    );
+    await showCategoryFormSheet(context, provider: widget.categoryProvider);
   }
 
   Future<void> _onAddBatch() async {
@@ -106,17 +107,19 @@ class _HomeShellState extends State<HomeShell> {
       ProductsPage(
         productProvider: widget.productProvider,
         categoryProvider: widget.categoryProvider,
+        outingProvider: widget.outingProvider,
       ),
       BatchesPage(
         stockBatchProvider: widget.stockBatchProvider,
         productProvider: widget.productProvider,
       ),
+      ActivityLogPage(activityLogProvider: widget.activityLogProvider),
     ];
 
+    final titles = ['Product List', 'Batch List & History', 'Activity Log'];
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_currentIndex == 0 ? 'Product List' : 'Batch List & History'),
-      ),
+      appBar: AppBar(title: Text(titles[_currentIndex])),
       body: pages[_currentIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -134,6 +137,10 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(
             icon: Icon(Icons.history_outlined),
             label: 'Batches',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            label: 'Activity',
           ),
         ],
       ),
@@ -182,7 +189,8 @@ class _HomeShellState extends State<HomeShell> {
           ],
           FloatingActionButton(
             heroTag: 'mainActionsFab',
-            onPressed: () => setState(() => _actionsFabExpanded = !_actionsFabExpanded),
+            onPressed: () =>
+                setState(() => _actionsFabExpanded = !_actionsFabExpanded),
             child: Icon(_actionsFabExpanded ? Icons.close : Icons.add),
           ),
         ],

@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
+import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/stock_batch_repository.dart';
 
 class StockBatchProvider extends ChangeNotifier {
-  StockBatchProvider(this._repository);
+  StockBatchProvider(this._repository, this._activityLogProvider);
 
   final StockBatchRepository _repository;
+  final ActivityLogProvider _activityLogProvider;
   final _uuid = const Uuid();
 
   List<StockBatch> _items = [];
@@ -67,6 +70,13 @@ class StockBatchProvider extends ChangeNotifier {
     );
 
     await _repository.create(batch);
+    await _activityLogProvider.log(
+      actionType: ActivityActionType.batchCreated,
+      title: 'Stock batch created',
+      description:
+          'Created ${batch.batchName} with ${batch.items.length} item(s).',
+      referenceId: batch.id,
+    );
     await load();
     return null;
   }

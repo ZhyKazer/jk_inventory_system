@@ -118,3 +118,9 @@ Notes
 - `lib/services/inventory_storage.dart` — Hive initialization and box helpers
 - `Master_Task.md` — design spec, tasks, and roadmap
 ---
+
+Copyright (c) 2026 SkyeLucas
+
+All rights reserved.
+
+This source code and associated files may not be copied, modified, distributed, or used in any form without explicit written permission from the author.

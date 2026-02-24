@@ -101,6 +101,18 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  Future<void> _onHelpPage() async{
+    setState(() => _actionsFabExpanded = false);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CategoriesPage(
+          categoryProvider: widget.categoryProvider,
+          productProvider: widget.productProvider,
+        ),
+      ),      
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -184,6 +196,13 @@ class _HomeShellState extends State<HomeShell> {
               onPressed: _onManageCategories,
               icon: const Icon(Icons.list_alt_outlined),
               label: const Text('Manage Categories'),
+            ),
+            const SizedBox(height: 12),
+            FloatingActionButton.extended(
+              heroTag: 'helpFab',
+              onPressed: _onHelpPage,
+              icon: const Icon(Icons.question_answer_rounded),
+              label: const Text('Help'),
             ),
             const SizedBox(height: 12),
           ],

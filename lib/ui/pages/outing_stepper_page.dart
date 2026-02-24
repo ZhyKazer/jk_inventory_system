@@ -133,20 +133,6 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     return product.first.name;
   }
 
-  bool _hasDraftForUnit(
-    List<OutingLine> lines,
-    String productId,
-    UnitType unitType,
-  ) {
-    for (final line in lines) {
-      if (line.productId == productId &&
-          line.unitType == unitType &&
-          line.value > 0) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   bool _canDisplayProduct(Product product, UnitType unitType) {
     return widget.outingProvider.batchStockFor(product.id, unitType) > 0 &&

@@ -99,6 +99,14 @@ Notes
 - Add multi-device sync and conflict resolution (planned but out of scope for current repo)
 - Expand platform CI and automated tests
 
+## Recent changes: Phase 8 & 9 (UX hardening + Firebase-ready)
+
+- Added local product search/filter on the product list page.
+- Introduced repository interface abstractions to decouple domain logic from Hive (`lib/repositories/inventory_repo_interfaces.dart`).
+- Updated existing `ProductRepository` and `CategoryRepository` to implement the new interfaces.
+- Added `docs/firebase_sync.md` with notes and TODOs for future Firebase/cloud sync work.
+
+
 ## Contribution
 
 - Read `Master_Task.md` for the feature breakdown, acceptance criteria, and implementation notes.

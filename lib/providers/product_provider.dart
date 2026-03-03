@@ -3,12 +3,12 @@ import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
-import 'package:jk_inventory_system/repositories/product_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
 class ProductProvider extends ChangeNotifier {
   ProductProvider(this._repository, this._activityLogProvider);
 
-  final ProductRepository _repository;
+  final ProductRepositoryInterface _repository;
   final ActivityLogProvider _activityLogProvider;
   final _uuid = const Uuid();
 

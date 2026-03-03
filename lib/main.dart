@@ -1,20 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
-import 'package:jk_inventory_system/models/activity_log.dart';
-import 'package:jk_inventory_system/models/category.dart';
-import 'package:jk_inventory_system/models/outing_record.dart';
-import 'package:jk_inventory_system/models/product.dart';
-import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
-import 'package:jk_inventory_system/repositories/activity_log_repository.dart';
-import 'package:jk_inventory_system/repositories/category_repository.dart';
-import 'package:jk_inventory_system/repositories/outing_repository.dart';
-import 'package:jk_inventory_system/repositories/product_repository.dart';
-import 'package:jk_inventory_system/repositories/stock_batch_repository.dart';
 import 'package:jk_inventory_system/services/inventory_storage.dart';
 import 'package:jk_inventory_system/ui/pages/home_shell.dart';
 
@@ -42,35 +31,14 @@ class _InventoryAppState extends State<InventoryApp> {
   void initState() {
     super.initState();
 
-    final categoriesBox = Hive.box<Category>(
-      InventoryStorage.categoriesBoxName,
-    );
-    final productsBox = Hive.box<Product>(InventoryStorage.productsBoxName);
-    final batchesBox = Hive.box<StockBatch>(
-      InventoryStorage.stockBatchesBoxName,
-    );
-    final outingsBox = Hive.box<OutingRecord>(InventoryStorage.outingsBoxName);
-    final activityLogsBox = Hive.box<ActivityLog>(
-      InventoryStorage.activityLogsBoxName,
-    );
+    final repo = InventoryStorage.localRepo();
 
-    _activityLogProvider = ActivityLogProvider(
-      ActivityLogRepository(activityLogsBox),
-    );
-    _categoryProvider = CategoryProvider(
-      CategoryRepository(categoriesBox),
-      _activityLogProvider,
-    );
-    _productProvider = ProductProvider(
-      ProductRepository(productsBox),
-      _activityLogProvider,
-    );
-    _stockBatchProvider = StockBatchProvider(
-      StockBatchRepository(batchesBox),
-      _activityLogProvider,
-    );
+    _activityLogProvider = ActivityLogProvider(repo.activityLogs);
+    _categoryProvider = CategoryProvider(repo.categories, _activityLogProvider);
+    _productProvider = ProductProvider(repo.products, _activityLogProvider);
+    _stockBatchProvider = StockBatchProvider(repo.stockBatches, _activityLogProvider);
     _outingProvider = OutingProvider(
-      OutingRepository(outingsBox),
+      repo.outings,
       () => _stockBatchProvider.items,
       () => _productProvider.items,
       _activityLogProvider,
@@ -91,6 +59,44 @@ class _InventoryAppState extends State<InventoryApp> {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+          },
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: ButtonStyle(
+            animationDuration: const Duration(milliseconds: 220),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: ButtonStyle(
+            animationDuration: const Duration(milliseconds: 220),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: ButtonStyle(
+            animationDuration: const Duration(milliseconds: 220),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ButtonStyle(
+            animationDuration: const Duration(milliseconds: 220),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
       ),
       home: HomeShell(
         categoryProvider: _categoryProvider,

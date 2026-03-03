@@ -1,7 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
-class StockBatchRepository {
+class StockBatchRepository implements StockBatchRepositoryInterface {
   StockBatchRepository(this._box);
 
   final Box<StockBatch> _box;

@@ -1,7 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
-class ActivityLogRepository {
+class ActivityLogRepository implements ActivityLogRepositoryInterface {
   ActivityLogRepository(this._box);
 
   final Box<ActivityLog> _box;

@@ -6,7 +6,7 @@ import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
-import 'package:jk_inventory_system/repositories/outing_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 import 'package:jk_inventory_system/services/inventory_stock_calculator.dart';
 
 enum OutingStepType { displayed, returned, discarded, replaced }
@@ -19,7 +19,7 @@ class OutingProvider extends ChangeNotifier {
     this._activityLogProvider,
   );
 
-  final OutingRepository _repository;
+  final OutingRepositoryInterface _repository;
   final List<StockBatch> Function() _getBatches;
   final List<Product> Function() _getProducts;
   final ActivityLogProvider _activityLogProvider;

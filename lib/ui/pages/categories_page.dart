@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/models/category.dart';
+import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
@@ -82,6 +83,7 @@ class CategoriesPage extends StatelessWidget {
                   backgroundColor: colorFromHex(category.colorHex),
                 ),
                 title: Text(category.name),
+                subtitle: Text(category.defaultUnit.label),
                 trailing: Wrap(
                   spacing: 4,
                   children: [

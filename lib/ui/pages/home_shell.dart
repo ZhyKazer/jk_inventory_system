@@ -5,6 +5,7 @@ import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/ui/pages/activity_log_page.dart';
+import 'package:jk_inventory_system/ui/pages/analytics_page.dart';
 import 'package:jk_inventory_system/ui/pages/batches_page.dart';
 import 'package:jk_inventory_system/ui/pages/categories_page.dart';
 import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
@@ -47,6 +48,7 @@ class _HomeShellState extends State<HomeShell> {
   final GlobalKey _productsNavKey = GlobalKey();
   final GlobalKey _batchesNavKey = GlobalKey();
   final GlobalKey _activityNavKey = GlobalKey();
+  final GlobalKey _analyticsNavKey = GlobalKey();
 
   final List<_HelpStep> _helpSteps = const [
     _HelpStep(
@@ -138,6 +140,7 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => CreateBatchPage(
           stockBatchProvider: widget.stockBatchProvider,
           productProvider: widget.productProvider,
+          categoryProvider: widget.categoryProvider,
         ),
       ),
     );
@@ -247,13 +250,36 @@ class _HomeShellState extends State<HomeShell> {
         productProvider: widget.productProvider,
       ),
       ActivityLogPage(activityLogProvider: widget.activityLogProvider),
+      AnalyticsPage(
+        productProvider: widget.productProvider,
+        outingProvider: widget.outingProvider,
+      ),
     ];
 
-    final titles = ['Product List', 'Batch List & History', 'Activity Log'];
+    final titles = ['Product List', 'Batch List & History', 'Activity Log', 'Analytics'];
 
     return Scaffold(
       appBar: AppBar(title: Text(titles[_currentIndex])),
-      body: pages[_currentIndex],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          final offsetAnimation = Tween<Offset>(
+            begin: const Offset(0.04, 0),
+            end: Offset.zero,
+          ).animate(animation);
+
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(position: offsetAnimation, child: child),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey(_currentIndex),
+          child: pages[_currentIndex],
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
@@ -274,6 +300,10 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined, key: _activityNavKey),
             label: 'Activity',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined, key: _analyticsNavKey),
+            label: 'Analytics',
           ),
         ],
       ),

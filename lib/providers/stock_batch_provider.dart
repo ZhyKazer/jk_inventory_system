@@ -5,12 +5,12 @@ import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
-import 'package:jk_inventory_system/repositories/stock_batch_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
 class StockBatchProvider extends ChangeNotifier {
   StockBatchProvider(this._repository, this._activityLogProvider);
 
-  final StockBatchRepository _repository;
+  final StockBatchRepositoryInterface _repository;
   final ActivityLogProvider _activityLogProvider;
   final _uuid = const Uuid();
 

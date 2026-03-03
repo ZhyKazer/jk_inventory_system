@@ -30,20 +30,16 @@ class ActivityLogPage extends StatelessWidget {
   }
 
   Future<void> _showDetails(BuildContext context, ActivityLog item) {
-    return showModalBottomSheet<void>(
+    return showDialog<void>(
       context: context,
-      showDragHandle: true,
       builder: (context) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        return AlertDialog(
+          title: Text(item.title),
+          content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.title, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 12),
                 Text('Type: ${_actionLabel(item.actionType)}'),
                 const SizedBox(height: 6),
                 Text(
@@ -75,6 +71,12 @@ class ActivityLogPage extends StatelessWidget {
               ],
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+          ],
         );
       },
     );
@@ -101,7 +103,7 @@ class ActivityLogPage extends StatelessWidget {
         return ListView.separated(
           padding: const EdgeInsets.all(12),
           itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
           itemBuilder: (context, index) {
             final item = items[index];
             return Card(

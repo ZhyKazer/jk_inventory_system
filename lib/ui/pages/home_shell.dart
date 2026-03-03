@@ -169,6 +169,7 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => OutingStepperPage(
           outingProvider: widget.outingProvider,
           productProvider: widget.productProvider,
+          categoryProvider: widget.categoryProvider,
         ),
       ),
     );

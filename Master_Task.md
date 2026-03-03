@@ -263,30 +263,30 @@ Open menu/speed dial with actions:
 - [x] Build Activity Log page (latest first, read-only).
 
 ## Phase 8 - UX Hardening
-- [ ] Empty states for all list pages.
-- [ ] Error messages for invalid inputs.
-- [ ] Confirmation dialogs for destructive actions.
-- [ ] Basic search/filter in product list (optional MVP+).
+- [x] Empty states for all list pages.
+- [x] Error messages for invalid inputs.
+- [x] Confirmation dialogs for destructive actions.
+- [x] Basic search/filter in product list (optional MVP+).
 
 ## Phase 9 - Firebase-Ready Architecture (No Implementation)
-- [ ] Define repository interfaces (`LocalInventoryRepo`, `CloudInventoryRepo`).
-- [ ] Keep domain layer independent from Hive implementation.
-- [ ] Add TODO markers and docs for future Firebase sync.
+- [x] Define repository interfaces (`LocalInventoryRepo`, `CloudInventoryRepo`).
+- [x] Keep domain layer independent from Hive implementation.
+- [x] Add TODO markers and docs for future Firebase sync.
 
 ---
 
 ## 7) Acceptance Criteria
-- [ ] User can fully CRUD categories with name and color.
-- [ ] User can fully CRUD products with category and name.
-- [ ] User can create a batch with multiple items and valid units/values/prices.
-- [ ] Batch names follow `Batch_MM_DD_YYYY-UID`.
-- [ ] User can complete outing stepper with strict quantity/kilo validations.
-- [ ] Calculations correctly adjust stock.
-- [ ] Product list shows all registered products.
-- [ ] Batch list/history shows all batches and details.
-- [ ] Activity Log shows major actions in reverse chronological order.
-- [ ] Data persists across app restarts via Hive.
-- [ ] No Firebase code execution yet.
+- [x] User can fully CRUD categories with name and color.
+- [x] User can fully CRUD products with category and name.
+- [x] User can create a batch with multiple items and valid units/values/prices.
+- [x] Batch names follow `Batch_MM_DD_YYYY-UID`.
+- [x] User can complete outing stepper with strict quantity/kilo validations.
+- [x] Calculations correctly adjust stock.
+- [x] Product list shows all registered products.
+- [x] Batch list/history shows all batches and details.
+- [x] Activity Log shows major actions in reverse chronological order.
+- [x] Data persists across app restarts via Hive.
+- [x] No Firebase code execution yet.
 - [ ] App runs correctly on Android and iOS devices.
 
 ---

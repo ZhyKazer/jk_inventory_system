@@ -209,6 +209,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
       return;
     }
 
+    await widget.productProvider.updatePricesFromBatchItems(items);
+    if (!mounted) return;
+
     Navigator.of(context).pop(true);
   }
 

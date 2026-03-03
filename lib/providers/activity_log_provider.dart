@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
-import 'package:jk_inventory_system/repositories/activity_log_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
 class ActivityLogProvider extends ChangeNotifier {
   ActivityLogProvider(this._repository);
 
-  final ActivityLogRepository _repository;
+  final ActivityLogRepositoryInterface _repository;
   final _uuid = const Uuid();
 
   List<ActivityLog> _items = [];

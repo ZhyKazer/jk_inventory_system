@@ -2,13 +2,14 @@ import 'package:flutter/foundation.dart' hide Category;
 import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/category.dart';
+import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
-import 'package:jk_inventory_system/repositories/category_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
 class CategoryProvider extends ChangeNotifier {
   CategoryProvider(this._repository, this._activityLogProvider);
 
-  final CategoryRepository _repository;
+  final CategoryRepositoryInterface _repository;
   final ActivityLogProvider _activityLogProvider;
   final _uuid = const Uuid();
 
@@ -41,6 +42,14 @@ class CategoryProvider extends ChangeNotifier {
     required String name,
     required String colorHex,
   }) async {
+    return await createWithUnit(name: name, colorHex: colorHex, defaultUnit: null);
+  }
+
+  Future<String?> createWithUnit({
+    required String name,
+    required String colorHex,
+    UnitType? defaultUnit,
+  }) async {
     final error = validateName(name);
     if (error != null) return error;
 
@@ -49,6 +58,7 @@ class CategoryProvider extends ChangeNotifier {
       id: _uuid.v4(),
       name: name.trim(),
       colorHex: colorHex,
+      defaultUnit: defaultUnit ?? UnitType.quantity,
       createdAt: now,
       updatedAt: now,
     );
@@ -68,6 +78,7 @@ class CategoryProvider extends ChangeNotifier {
     required String id,
     required String name,
     required String colorHex,
+    UnitType? defaultUnit,
   }) async {
     final error = validateName(name, editingId: id);
     if (error != null) return error;
@@ -76,6 +87,7 @@ class CategoryProvider extends ChangeNotifier {
     final updated = current.copyWith(
       name: name.trim(),
       colorHex: colorHex,
+      defaultUnit: defaultUnit ?? current.defaultUnit,
       updatedAt: DateTime.now(),
     );
     await _repository.update(updated);

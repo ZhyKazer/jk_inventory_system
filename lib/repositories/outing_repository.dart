@@ -1,7 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
-class OutingRepository {
+class OutingRepository implements OutingRepositoryInterface {
   OutingRepository(this._box);
 
   final Box<OutingRecord> _box;

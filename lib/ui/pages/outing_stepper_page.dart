@@ -1,9 +1,15 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:path_provider/path_provider.dart';
 
 class OutingStepperPage extends StatefulWidget {
   const OutingStepperPage({
@@ -21,6 +27,7 @@ class OutingStepperPage extends StatefulWidget {
 
 class _OutingStepperPageState extends State<OutingStepperPage> {
   int _currentStep = 0;
+  final GlobalKey _receiptBoundaryKey = GlobalKey();
 
   static const List<_WizardStepMeta> _stepMeta = [
     _WizardStepMeta(
@@ -82,6 +89,45 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     }
 
     Navigator.of(context).pop(true);
+  }
+
+  Future<void> _exportReceiptPng() async {
+    try {
+      final boundary =
+          _receiptBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Receipt preview is not ready yet.')),
+        );
+        return;
+      }
+
+      final image = await boundary.toImage(pixelRatio: 2.5);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to generate receipt image.')),
+        );
+        return;
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+      final dir = await getTemporaryDirectory();
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final file = File('${dir.path}/outing_receipt_$timestamp.png');
+      await file.writeAsBytes(pngBytes, flush: true);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Receipt exported: ${file.path}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to export receipt image.')),
+      );
+    }
   }
 
   void _goNextStep() {
@@ -469,12 +515,28 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
           ],
         );
       default:
-        return _ReviewSection(
-          productName: _productName,
-          displayed: widget.outingProvider.displayedDraft,
-          returned: widget.outingProvider.returnedDraft,
-          discarded: widget.outingProvider.discardedDraft,
-          replaced: widget.outingProvider.replacedDraft,
+        final summary = widget.outingProvider.calculateDraftSummary();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RepaintBoundary(
+              key: _receiptBoundaryKey,
+              child: _ReviewSection(
+                productName: _productName,
+                displayed: widget.outingProvider.displayedDraft,
+                returned: widget.outingProvider.returnedDraft,
+                discarded: widget.outingProvider.discardedDraft,
+                replaced: widget.outingProvider.replacedDraft,
+                summary: summary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _exportReceiptPng,
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: const Text('Export Receipt PNG'),
+            ),
+          ],
         );
     }
   }
@@ -812,6 +874,7 @@ class _ReviewSection extends StatelessWidget {
     required this.returned,
     required this.discarded,
     required this.replaced,
+    required this.summary,
   });
 
   final String Function(String) productName;
@@ -819,6 +882,7 @@ class _ReviewSection extends StatelessWidget {
   final List<OutingLine> returned;
   final List<OutingLine> discarded;
   final List<OutingLine> replaced;
+  final OutingCalculationSummary summary;
 
   List<OutingLine> _soldLines() {
     final displayedMap = <String, OutingLine>{};
@@ -901,11 +965,76 @@ class _ReviewSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Outing Receipt Preview',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text('Date: ${DateFormat('MMM d, yyyy • h:mm a').format(DateTime.now())}'),
+              const SizedBox(height: 8),
+              Text('Displayed: ${summary.totalDisplayed.toStringAsFixed(2)}'),
+              Text('Returned: ${summary.totalReturned.toStringAsFixed(2)}'),
+              Text('Sold: ${summary.totalSold.toStringAsFixed(2)}'),
+              Text('Capital (COGS): ${summary.totalCapital.toStringAsFixed(2)}'),
+              Text('Revenue: ${summary.totalRevenue.toStringAsFixed(2)}'),
+              Text(
+                'Approximate Profit: ${summary.approximateProfit.toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Formula: (Sold × current selling price) - (Sold × current capital)',
+              ),
+            ],
+          ),
+        ),
         _section(context, 'Displayed', displayed),
         _section(context, 'Returned', returned),
         _section(context, 'Sold (Displayed - Returned)', sold),
         _section(context, 'Discarded', discarded),
         _section(context, 'Replaced', replaced),
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Per Product Profit',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              if (summary.perProduct.isEmpty)
+                const Text('No sold products yet.')
+              else
+                for (final item in summary.perProduct)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '• ${item.productName} • Sold ${item.sold.toStringAsFixed(2)} • Capital ${item.currentCapital.toStringAsFixed(2)} • Selling ${item.currentSelling.toStringAsFixed(2)} • Profit ${item.approxProfit.toStringAsFixed(2)}',
+                    ),
+                  ),
+            ],
+          ),
+        ),
       ],
     );
   }

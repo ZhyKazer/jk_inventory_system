@@ -6,10 +6,62 @@ import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
-import 'package:jk_inventory_system/repositories/outing_repository.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 import 'package:jk_inventory_system/services/inventory_stock_calculator.dart';
 
 enum OutingStepType { displayed, returned, discarded, replaced }
+
+class OutingProductCalculation {
+  OutingProductCalculation({
+    required this.productId,
+    required this.productName,
+    required this.displayed,
+    required this.returned,
+    required this.sold,
+    required this.currentCapital,
+    required this.currentSelling,
+    required this.revenue,
+    required this.capitalCost,
+    required this.approxProfit,
+  });
+
+  final String productId;
+  final String productName;
+  final double displayed;
+  final double returned;
+  final double sold;
+  final double currentCapital;
+  final double currentSelling;
+  final double revenue;
+  final double capitalCost;
+  final double approxProfit;
+}
+
+class OutingCalculationSummary {
+  OutingCalculationSummary({
+    required this.totalDisplayed,
+    required this.totalReturned,
+    required this.totalDiscarded,
+    required this.totalReplaced,
+    required this.totalSold,
+    required this.totalRevenue,
+    required this.totalCapital,
+    required this.approximateProfit,
+    required this.totalLost,
+    required this.perProduct,
+  });
+
+  final double totalDisplayed;
+  final double totalReturned;
+  final double totalDiscarded;
+  final double totalReplaced;
+  final double totalSold;
+  final double totalRevenue;
+  final double totalCapital;
+  final double approximateProfit;
+  final double totalLost;
+  final List<OutingProductCalculation> perProduct;
+}
 
 class OutingProvider extends ChangeNotifier {
   OutingProvider(
@@ -19,7 +71,7 @@ class OutingProvider extends ChangeNotifier {
     this._activityLogProvider,
   );
 
-  final OutingRepository _repository;
+  final OutingRepositoryInterface _repository;
   final List<StockBatch> Function() _getBatches;
   final List<Product> Function() _getProducts;
   final ActivityLogProvider _activityLogProvider;
@@ -257,6 +309,100 @@ class OutingProvider extends ChangeNotifier {
 
   bool get canSubmit => _displayedDraft.isNotEmpty;
 
+  Map<String, double> _sumByProduct(List<OutingLine> lines) {
+    final totals = <String, double>{};
+    for (final line in lines) {
+      totals.update(line.productId, (value) => value + line.value,
+          ifAbsent: () => line.value);
+    }
+    return totals;
+  }
+
+  OutingCalculationSummary calculateDraftSummary() {
+    final products = _getProducts();
+    final productsById = {for (final product in products) product.id: product};
+
+    final displayedByProduct = _sumByProduct(_displayedDraft);
+    final returnedByProduct = _sumByProduct(_returnedDraft);
+    final discardedByProduct = _sumByProduct(_discardedDraft);
+    final replacedByProduct = _sumByProduct(_replacedDraft);
+
+    final allProductIds = <String>{
+      ...displayedByProduct.keys,
+      ...returnedByProduct.keys,
+      ...discardedByProduct.keys,
+      ...replacedByProduct.keys,
+    };
+
+    var totalDisplayed = 0.0;
+    var totalReturned = 0.0;
+    var totalDiscarded = 0.0;
+    var totalReplaced = 0.0;
+    var totalSold = 0.0;
+    var totalRevenue = 0.0;
+    var totalCapital = 0.0;
+    var totalLost = 0.0;
+    final perProduct = <OutingProductCalculation>[];
+
+    for (final productId in allProductIds) {
+      final product = productsById[productId];
+      final displayed = displayedByProduct[productId] ?? 0.0;
+      final returned = returnedByProduct[productId] ?? 0.0;
+      final discarded = discardedByProduct[productId] ?? 0.0;
+      final replaced = replacedByProduct[productId] ?? 0.0;
+      final sold = displayed - returned;
+      final safeSold = sold > 0 ? sold : 0.0;
+
+      final capital = product?.costPrice ?? 0.0;
+      final selling = product?.sellingPrice ?? 0.0;
+      final revenue = safeSold * selling;
+      final capitalCost = safeSold * capital;
+      final approxProfit = revenue - capitalCost;
+      final lost = discarded * capital;
+
+      totalDisplayed += displayed;
+      totalReturned += returned;
+      totalDiscarded += discarded;
+      totalReplaced += replaced;
+      totalSold += safeSold;
+      totalRevenue += revenue;
+      totalCapital += capitalCost;
+      totalLost += lost;
+
+      if (displayed > 0 || returned > 0 || safeSold > 0) {
+        perProduct.add(
+          OutingProductCalculation(
+            productId: productId,
+            productName: product?.name ?? 'Unknown Product',
+            displayed: displayed,
+            returned: returned,
+            sold: safeSold,
+            currentCapital: capital,
+            currentSelling: selling,
+            revenue: revenue,
+            capitalCost: capitalCost,
+            approxProfit: approxProfit,
+          ),
+        );
+      }
+    }
+
+    perProduct.sort((a, b) => a.productName.compareTo(b.productName));
+
+    return OutingCalculationSummary(
+      totalDisplayed: totalDisplayed,
+      totalReturned: totalReturned,
+      totalDiscarded: totalDiscarded,
+      totalReplaced: totalReplaced,
+      totalSold: totalSold,
+      totalRevenue: totalRevenue,
+      totalCapital: totalCapital,
+      approximateProfit: totalRevenue - totalCapital,
+      totalLost: totalLost,
+      perProduct: perProduct,
+    );
+  }
+
   Future<String?> submitDraft() async {
     if (!canSubmit) {
       return 'Displayed products are required before submission.';
@@ -264,6 +410,7 @@ class OutingProvider extends ChangeNotifier {
 
     final now = DateTime.now();
     final dateOnly = DateTime(now.year, now.month, now.day);
+    final summary = calculateDraftSummary();
     final record = OutingRecord(
       id: _uuid.v4(),
       date: dateOnly,
@@ -273,47 +420,15 @@ class OutingProvider extends ChangeNotifier {
       discardedProducts: List<OutingLine>.from(_discardedDraft),
       replacedDiscardedProducts: List<OutingLine>.from(_replacedDraft),
       submittedAt: now,
+      totalDisplayed: summary.totalDisplayed,
+      totalReturned: summary.totalReturned,
+      totalDiscarded: summary.totalDiscarded,
+      totalReplaced: summary.totalReplaced,
+      totalSold: summary.totalSold,
+      totalRevenue: summary.totalRevenue,
+      totalCapital: summary.totalCapital,
+      approximateProfit: summary.approximateProfit,
     );
-
-    // Calculate totals
-    final products = _getProducts();
-    double totalDisplayed = 0;
-    double totalReturned = 0;
-    double totalDiscarded = 0;
-    double totalReplaced = 0;
-    double totalSold = 0;
-    double totalProfit = 0;
-    double totalLost = 0;
-
-    final allLines = [
-      ..._displayedDraft,
-      ..._returnedDraft,
-      ..._discardedDraft,
-      ..._replacedDraft,
-    ];
-
-    Product? firstProduct;
-    for (final line in allLines) {
-      final product = products.firstWhere((p) => p.id == line.productId);
-      if (firstProduct == null) firstProduct = product;
-      final value = line.value;
-      if (_displayedDraft.contains(line)) {
-        totalDisplayed += value;
-      } else if (_returnedDraft.contains(line)) {
-        totalReturned += value;
-      } else if (_discardedDraft.contains(line)) {
-        totalDiscarded += value;
-        totalLost += product.costPrice * value;
-      } else if (_replacedDraft.contains(line)) {
-        totalReplaced += value;
-      }
-    }
-
-    totalSold = totalDisplayed - totalReturned + totalReplaced;
-    if (firstProduct != null) {
-      totalProfit =
-          totalSold * (firstProduct.sellingPrice - firstProduct.costPrice);
-    }
 
     await _repository.create(record);
     await _activityLogProvider.log(
@@ -322,13 +437,13 @@ class OutingProvider extends ChangeNotifier {
       description:
           'Submitted outing for ${record.date.toIso8601String().split('T').first} with ${record.displayedProducts.length} displayed line(s).',
       referenceId: record.id,
-      displayed: totalDisplayed,
-      returned: totalReturned,
-      discarded: totalDiscarded,
-      replaced: totalReplaced,
-      sold: totalSold,
-      profit: totalProfit,
-      lost: totalLost,
+      displayed: summary.totalDisplayed,
+      returned: summary.totalReturned,
+      discarded: summary.totalDiscarded,
+      replaced: summary.totalReplaced,
+      sold: summary.totalSold,
+      profit: summary.approximateProfit,
+      lost: summary.totalLost,
     );
     await load();
     startDraft();

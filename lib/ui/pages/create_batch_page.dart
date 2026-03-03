@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
+import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 
@@ -11,10 +13,12 @@ class CreateBatchPage extends StatefulWidget {
     super.key,
     required this.stockBatchProvider,
     required this.productProvider,
+    required this.categoryProvider,
   });
 
   final StockBatchProvider stockBatchProvider;
   final ProductProvider productProvider;
+  final CategoryProvider categoryProvider;
 
   @override
   State<CreateBatchPage> createState() => _CreateBatchPageState();
@@ -23,6 +27,35 @@ class CreateBatchPage extends StatefulWidget {
 class _CreateBatchPageState extends State<CreateBatchPage> {
   final List<_BatchItemDraft> _rows = [];
   bool _isSaving = false;
+
+  Set<String> _selectedProductIds({int? excludingRowIndex}) {
+    final ids = <String>{};
+    for (var index = 0; index < _rows.length; index++) {
+      if (excludingRowIndex != null && index == excludingRowIndex) {
+        continue;
+      }
+      final productId = _rows[index].productId;
+      if (productId.isNotEmpty) {
+        ids.add(productId);
+      }
+    }
+    return ids;
+  }
+
+  bool _canAddMoreRows(List<Product> products) {
+    if (products.isEmpty) return false;
+    return _rows.length < products.length;
+  }
+
+  List<Product> _availableProductsForRow(int rowIndex, List<Product> products) {
+    final selectedByOthers = _selectedProductIds(excludingRowIndex: rowIndex);
+    final currentId = _rows[rowIndex].productId;
+
+    return products
+        .where((product) =>
+            product.id == currentId || !selectedByOthers.contains(product.id))
+        .toList();
+  }
 
   @override
   void initState() {
@@ -39,18 +72,57 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
   }
 
   void _addRow() {
-    final defaultProductId = widget.productProvider.items.isNotEmpty
-        ? widget.productProvider.items.first.id
-        : '';
+    final products = widget.productProvider.items;
+    if (!_canAddMoreRows(products)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All available products are already in the batch list.'),
+        ),
+      );
+      return;
+    }
+
+    final selectedIds = _selectedProductIds();
+    String defaultProductId = '';
+    for (final product in products) {
+      if (!selectedIds.contains(product.id)) {
+        defaultProductId = product.id;
+        break;
+      }
+    }
 
     setState(() {
       _rows.add(
         _BatchItemDraft(
           productId: defaultProductId,
-          unitType: UnitType.quantity,
+          unitType: _unitForProduct(defaultProductId),
         ),
       );
     });
+  }
+
+  UnitType _unitForProduct(String productId) {
+    if (productId.isEmpty) return UnitType.quantity;
+
+    Product? matchedProduct;
+    for (final product in widget.productProvider.items) {
+      if (product.id == productId) {
+        matchedProduct = product;
+        break;
+      }
+    }
+
+    if (matchedProduct == null) return UnitType.quantity;
+
+    Category? matchedCategory;
+    for (final category in widget.categoryProvider.items) {
+      if (category.id == matchedProduct.categoryId) {
+        matchedCategory = category;
+        break;
+      }
+    }
+
+    return matchedCategory?.defaultUnit ?? UnitType.quantity;
   }
 
   void _removeRow(int index) {
@@ -69,6 +141,7 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
     }
 
     final items = <BatchItem>[];
+    final seenProductIds = <String>{};
 
     for (final row in _rows) {
       final valueText = row.valueController.text.trim();
@@ -78,6 +151,15 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
       if (row.productId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Select a product for all rows.')),
+        );
+        return;
+      }
+
+      if (!seenProductIds.add(row.productId)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Duplicate product detected. Each product can only appear once per batch.'),
+          ),
         );
         return;
       }
@@ -127,6 +209,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
       return;
     }
 
+    await widget.productProvider.updatePricesFromBatchItems(items);
+    if (!mounted) return;
+
     Navigator.of(context).pop(true);
   }
 
@@ -150,7 +235,7 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  'Add one or more products with supplier/original price, selling price, unit type, and value.',
+                  'Tap "Add Product to Batch" to add items. Unit type follows the selected product category.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
@@ -158,12 +243,24 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
                   _BatchRowCard(
                     index: index,
                     row: _rows[index],
-                    products: products,
+                    products: _availableProductsForRow(index, products),
                     onDelete: _rows.length > 1 ? () => _removeRow(index) : null,
-                    onUnitTypeChanged: (unitType) {
+                    onProductChanged: (productId) {
+                      final selectedByOthers = _selectedProductIds(excludingRowIndex: index);
+                      if (selectedByOthers.contains(productId)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('This product is already in the list.'),
+                          ),
+                        );
+                        return;
+                      }
+
                       setState(() {
-                        _rows[index].unitType = unitType;
-                        if (unitType == UnitType.quantity) {
+                        _rows[index].productId = productId;
+                        _rows[index].unitType = _unitForProduct(productId);
+
+                        if (_rows[index].unitType == UnitType.quantity) {
                           final val = double.tryParse(_rows[index].valueController.text);
                           if (val != null && val % 1 != 0) {
                             _rows[index].valueController.text = val.toInt().toString();
@@ -174,9 +271,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
                   ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: _addRow,
+                  onPressed: _canAddMoreRows(products) ? _addRow : null,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add Product Row'),
+                  label: const Text('Add Product to Batch'),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
@@ -195,14 +292,14 @@ class _BatchRowCard extends StatelessWidget {
     required this.row,
     required this.products,
     this.onDelete,
-    required this.onUnitTypeChanged,
+    required this.onProductChanged,
   });
 
   final int index;
   final _BatchItemDraft row;
   final List<Product> products;
   final VoidCallback? onDelete;
-  final ValueChanged<UnitType> onUnitTypeChanged;
+  final ValueChanged<String> onProductChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +314,18 @@ class _BatchRowCard extends StatelessWidget {
               children: [
                 Text('Item ${index + 1}'),
                 const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    row.unitType.label,
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 if (onDelete != null)
                   IconButton(
                     onPressed: onDelete,
@@ -237,60 +346,56 @@ class _BatchRowCard extends StatelessWidget {
                     child: Text(product.name),
                   ),
               ],
-              onChanged: (value) => row.productId = value ?? '',
-            ),
-            const SizedBox(height: 10),
-            SegmentedButton<UnitType>(
-              segments: const [
-                ButtonSegment(
-                  value: UnitType.quantity,
-                  label: Text('Quantity'),
-                ),
-                ButtonSegment(
-                  value: UnitType.kilo,
-                  label: Text('Kilo'),
-                ),
-              ],
-              selected: {row.unitType},
-              onSelectionChanged: (values) {
-                onUnitTypeChanged(values.first);
+              onChanged: (value) {
+                final productId = value ?? '';
+                onProductChanged(productId);
               },
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: row.valueController,
-              keyboardType: row.unitType == UnitType.quantity
-                  ? TextInputType.number
-                  : const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: row.unitType == UnitType.quantity
-                  ? [FilteringTextInputFormatter.digitsOnly]
-                  : [_DecimalTextInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Value',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: row.originalPriceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [_DecimalTextInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Original Price (Supplier)',
-                prefixText: '₱',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: row.sellingPriceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [_DecimalTextInputFormatter()],
-              decoration: const InputDecoration(
-                labelText: 'Selling Price',
-                prefixText: '₱',
-                border: OutlineInputBorder(),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: row.valueController,
+                    keyboardType: row.unitType == UnitType.quantity
+                        ? TextInputType.number
+                        : const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: row.unitType == UnitType.quantity
+                        ? [FilteringTextInputFormatter.digitsOnly]
+                        : [_DecimalTextInputFormatter()],
+                    decoration: InputDecoration(
+                      labelText: row.unitType == UnitType.kilo ? 'Kilo' : 'Quantity',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: row.originalPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_DecimalTextInputFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Capital',
+                      prefixText: '₱',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: row.sellingPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_DecimalTextInputFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Sell',
+                      prefixText: '₱',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

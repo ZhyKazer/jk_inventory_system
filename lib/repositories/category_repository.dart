@@ -1,7 +1,8 @@
 import 'package:hive/hive.dart';
 import 'package:jk_inventory_system/models/category.dart';
+import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
-class CategoryRepository {
+class CategoryRepository implements CategoryRepositoryInterface {
   CategoryRepository(this._box);
 
   final Box<Category> _box;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' show ColorPicker;
+import 'dart:math';
 import 'package:jk_inventory_system/models/category.dart';
+import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart' as color_utils;
 
@@ -33,6 +35,7 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late Color _selectedColor;
+  late UnitType _selectedUnit;
   bool _isSaving = false;
 
   @override
@@ -41,7 +44,8 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
     _nameController = TextEditingController(text: widget.editing?.name ?? '');
     _selectedColor = widget.editing != null
       ? color_utils.colorFromHex(widget.editing!.colorHex)
-      : Colors.blue;
+      : Color(0xFF000000 | Random().nextInt(0xFFFFFF));
+    _selectedUnit = widget.editing?.defaultUnit ?? UnitType.quantity;
   }
 
   @override
@@ -58,12 +62,14 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
     final colorHex = color_utils.colorToHex(_selectedColor);
 
     final error = widget.editing == null
-        ? await widget.provider.create(name: name, colorHex: colorHex)
-        : await widget.provider.update(
-            id: widget.editing!.id,
-            name: name,
-            colorHex: colorHex,
-          );
+      ? await widget.provider.createWithUnit(
+        name: name, colorHex: colorHex, defaultUnit: _selectedUnit)
+      : await widget.provider.update(
+        id: widget.editing!.id,
+        name: name,
+        colorHex: colorHex,
+        defaultUnit: _selectedUnit,
+        );
 
     if (!mounted) return;
 
@@ -97,6 +103,22 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
             Text(
               widget.editing == null ? 'Add Category' : 'Edit Category',
               style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            const Text('Default Unit'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<UnitType>(
+              initialValue: _selectedUnit,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: UnitType.values
+                  .map(
+                    (u) => DropdownMenuItem<UnitType>(
+                      value: u,
+                      child: Text(u.label),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedUnit = v ?? UnitType.quantity),
             ),
             const SizedBox(height: 16),
             TextFormField(

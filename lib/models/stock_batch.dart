@@ -47,7 +47,11 @@ class StockBatchAdapter extends TypeAdapter<StockBatch> {
     final items = <BatchItem>[];
     for (var index = 0; index < itemCount; index++) {
       final productId = reader.readString();
-      final unitType = UnitType.values[reader.readInt()];
+      final unitIndex = reader.readInt();
+      final unitType =
+          unitIndex >= 0 && unitIndex < UnitType.values.length
+              ? UnitType.values[unitIndex]
+              : UnitType.quantity;
       final unitValue = reader.readDouble();
       final originalPrice = _readDouble(reader);
       final sellingPrice = _readDouble(reader, fallback: originalPrice);

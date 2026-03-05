@@ -1,6 +1,5 @@
 enum UnitType {
   quantity,
-  kilo,
 }
 
 extension UnitTypeX on UnitType {
@@ -8,8 +7,6 @@ extension UnitTypeX on UnitType {
     switch (this) {
       case UnitType.quantity:
         return 'Quantity';
-      case UnitType.kilo:
-        return 'Kilo';
     }
   }
 }

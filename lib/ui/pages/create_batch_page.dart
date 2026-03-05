@@ -364,7 +364,7 @@ class _BatchRowCard extends StatelessWidget {
                         ? [FilteringTextInputFormatter.digitsOnly]
                         : [_DecimalTextInputFormatter()],
                     decoration: InputDecoration(
-                      labelText: row.unitType == UnitType.kilo ? 'Kilo' : 'Quantity',
+                      labelText: 'Quantity',
                       border: const OutlineInputBorder(),
                     ),
                   ),

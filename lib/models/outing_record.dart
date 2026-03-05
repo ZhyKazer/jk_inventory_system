@@ -169,10 +169,14 @@ class OutingRecordAdapter extends TypeAdapter<OutingRecord> {
     final count = reader.readInt();
     final lines = <OutingLine>[];
     for (var index = 0; index < count; index++) {
+      final productId = reader.readString();
+      final unitIndex = reader.readInt();
       lines.add(
         OutingLine(
-          productId: reader.readString(),
-          unitType: UnitType.values[reader.readInt()],
+          productId: productId,
+          unitType: unitIndex >= 0 && unitIndex < UnitType.values.length
+              ? UnitType.values[unitIndex]
+              : UnitType.quantity,
           value: reader.readDouble(),
         ),
       );

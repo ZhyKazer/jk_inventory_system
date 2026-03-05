@@ -776,7 +776,6 @@ class _StepLineEntryState extends State<_StepLineEntry> {
         SegmentedButton<UnitType>(
           segments: const [
             ButtonSegment(value: UnitType.quantity, label: Text('Quantity')),
-            ButtonSegment(value: UnitType.kilo, label: Text('Kilo')),
           ],
           selected: {widget.unitType},
           onSelectionChanged: (values) => widget.onUnitChanged(values.first),

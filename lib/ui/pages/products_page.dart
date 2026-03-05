@@ -11,7 +11,6 @@ enum ProductSortTarget {
   productAlphabetical,
   categoryAlphabetical,
   qty,
-  kilo,
 }
 
 enum SortDirection {
@@ -134,7 +133,6 @@ class _ProductsPageState extends State<ProductsPage> {
   }) {
     final qtyRemaining =
         widget.outingProvider.currentStock(product.id, UnitType.quantity);
-    final kiloRemaining = widget.outingProvider.currentStock(product.id, UnitType.kilo);
 
     return showDialog<void>(
       context: context,
@@ -147,7 +145,6 @@ class _ProductsPageState extends State<ProductsPage> {
             Text('Category: $categoryName'),
             const SizedBox(height: 12),
             Text('Current Qty Remaining: ${qtyRemaining.toStringAsFixed(2)}'),
-            Text('Current Kilo Remaining: ${kiloRemaining.toStringAsFixed(2)}'),
             const SizedBox(height: 12),
             Text('Capital Price: ${product.costPrice.toStringAsFixed(2)}'),
             Text('Selling Price: ${product.sellingPrice.toStringAsFixed(2)}'),
@@ -198,10 +195,6 @@ class _ProductsPageState extends State<ProductsPage> {
                     DropdownMenuItem(
                       value: ProductSortTarget.qty,
                       child: Text('By Qty'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProductSortTarget.kilo,
-                      child: Text('By Kilo'),
                     ),
                   ],
                   onChanged: (value) {
@@ -273,11 +266,6 @@ class _ProductsPageState extends State<ProductsPage> {
             return category?.defaultUnit == UnitType.quantity;
           }
 
-          if (_sortTarget == ProductSortTarget.kilo) {
-            final category = categoryById[product.categoryId];
-            return category?.defaultUnit == UnitType.kilo;
-          }
-
           return true;
         }).toList();
 
@@ -315,23 +303,6 @@ class _ProductsPageState extends State<ProductsPage> {
                 ? leftQty.compareTo(rightQty)
                 : rightQty.compareTo(leftQty);
             if (qtyCompare != 0) return qtyCompare;
-            return leftName.compareTo(rightName);
-          }
-
-          if (_sortTarget == ProductSortTarget.kilo) {
-            final leftKilo = widget.outingProvider.currentStock(
-              left.id,
-              UnitType.kilo,
-            );
-            final rightKilo = widget.outingProvider.currentStock(
-              right.id,
-              UnitType.kilo,
-            );
-
-            final kiloCompare = _sortDirection == SortDirection.asc
-                ? leftKilo.compareTo(rightKilo)
-                : rightKilo.compareTo(leftKilo);
-            if (kiloCompare != 0) return kiloCompare;
             return leftName.compareTo(rightName);
           }
 

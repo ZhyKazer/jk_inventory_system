@@ -93,44 +93,49 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
             const SizedBox(height: 12),
             Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Highest Gross Items (Top 5)', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    if (analytics.topFive.isEmpty)
-                      const Text('No sold data for this month.')
-                    else
-                      ...analytics.topFive.map((item) => _RankTile(item: item)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Lowest Gross Items (Bottom 3)', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    if (analytics.bottomThree.isEmpty)
-                      const Text('No sold data for this month.')
-                    else
-                      ...analytics.bottomThree.map((item) => _RankTile(item: item)),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () => _showAllMonthlyItems(context, analytics.allSorted),
-                        icon: const Icon(Icons.list_alt_outlined),
-                        label: const Text('View Scrollable List'),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _showAllMonthlyItems(context, analytics.allSorted),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Highest Gross Items (Top 5)', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      if (analytics.topFive.isEmpty)
+                        const Text('No sold data for this month.')
+                      else
+                        ...analytics.topFive.map((item) => _RankTile(item: item)),
+                      const SizedBox(height: 12),
+                      Divider(color: Theme.of(context).dividerColor),
+                      const SizedBox(height: 12),
+                      Text('Lowest Gross Items (Bottom 3)', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      if (analytics.bottomThree.isEmpty)
+                        const Text('No sold data for this month.')
+                      else
+                        ...analytics.bottomThree.map((item) => _RankTile(item: item)),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Icon(
+                            Icons.touch_app_outlined,
+                            size: 16,
+                            color: Theme.of(context).hintColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Tap to view full list',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).hintColor,
+                                ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

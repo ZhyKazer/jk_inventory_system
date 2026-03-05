@@ -6,6 +6,7 @@ import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/services/inventory_storage.dart';
 import 'package:jk_inventory_system/ui/pages/home_shell.dart';
+import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,8 @@ class _InventoryAppState extends State<InventoryApp> {
   late final ProductProvider _productProvider;
   late final StockBatchProvider _stockBatchProvider;
   late final OutingProvider _outingProvider;
+  AppThemeOption _selectedTheme = AppThemeOption.dark;
+  Color _customThemeColor = Colors.deepPurple;
 
   @override
   void initState() {
@@ -51,59 +54,98 @@ class _InventoryAppState extends State<InventoryApp> {
     _outingProvider.load();
   }
 
+  void _setTheme(AppThemeOption theme) {
+    setState(() {
+      _selectedTheme = theme;
+    });
+  }
+
+  void _setCustomThemeColor(Color color) {
+    setState(() {
+      _customThemeColor = color;
+      _selectedTheme = AppThemeOption.custom;
+    });
+  }
+
+  ThemeData _buildThemeData({
+    required Color seedColor,
+    required Brightness brightness,
+  }) {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: brightness),
+      useMaterial3: true,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+        },
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          animationDuration: const Duration(milliseconds: 220),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          animationDuration: const Duration(milliseconds: 220),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          animationDuration: const Duration(milliseconds: 220),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ButtonStyle(
+          animationDuration: const Duration(milliseconds: 220),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  ThemeData _themeFromSelection() {
+    return switch (_selectedTheme) {
+      AppThemeOption.light =>
+        _buildThemeData(seedColor: Colors.indigo, brightness: Brightness.light),
+      AppThemeOption.dark =>
+        _buildThemeData(seedColor: Colors.indigo, brightness: Brightness.dark),
+      AppThemeOption.blue =>
+        _buildThemeData(seedColor: Colors.blue, brightness: Brightness.light),
+      AppThemeOption.green =>
+        _buildThemeData(seedColor: Colors.green, brightness: Brightness.light),
+      AppThemeOption.custom =>
+        _buildThemeData(seedColor: _customThemeColor, brightness: Brightness.light),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'JK Inventory System',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
-            TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
-          },
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: ButtonStyle(
-            animationDuration: const Duration(milliseconds: 220),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: ButtonStyle(
-            animationDuration: const Duration(milliseconds: 220),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: ButtonStyle(
-            animationDuration: const Duration(milliseconds: 220),
-          ),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ButtonStyle(
-            animationDuration: const Duration(milliseconds: 220),
-            shape: WidgetStatePropertyAll(
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ),
-      ),
+      theme: _themeFromSelection(),
       home: HomeShell(
         categoryProvider: _categoryProvider,
         productProvider: _productProvider,
         stockBatchProvider: _stockBatchProvider,
         outingProvider: _outingProvider,
         activityLogProvider: _activityLogProvider,
+        selectedTheme: _selectedTheme,
+        onThemeSelected: _setTheme,
+        selectedCustomThemeColor: _customThemeColor,
+        onCustomThemeColorSelected: _setCustomThemeColor,
       ),
     );
   }

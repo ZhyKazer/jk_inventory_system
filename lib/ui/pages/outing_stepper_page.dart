@@ -4,11 +4,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
+import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
+import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/ui/utils/color_utils.dart' as color_utils;
 import 'package:path_provider/path_provider.dart';
 
 class OutingStepperPage extends StatefulWidget {
@@ -16,10 +19,12 @@ class OutingStepperPage extends StatefulWidget {
     super.key,
     required this.outingProvider,
     required this.productProvider,
+    required this.categoryProvider,
   });
 
   final OutingProvider outingProvider;
   final ProductProvider productProvider;
+  final CategoryProvider categoryProvider;
 
   @override
   State<OutingStepperPage> createState() => _OutingStepperPageState();
@@ -177,6 +182,29 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     );
     if (product.isEmpty) return 'Unknown Product';
     return product.first.name;
+  }
+
+  Category? _categoryForProduct(Product product) {
+    for (final category in widget.categoryProvider.items) {
+      if (category.id == product.categoryId) {
+        return category;
+      }
+    }
+    return null;
+  }
+
+  String _productDropdownLabel(Product product) {
+    final category = _categoryForProduct(product);
+    final categoryName = category?.name ?? 'Unknown Category';
+    return '${product.name} ($categoryName)';
+  }
+
+  Color _productCategoryColor(Product product) {
+    final category = _categoryForProduct(product);
+    if (category == null) {
+      return Colors.grey;
+    }
+    return color_utils.colorFromHex(category.colorHex);
   }
 
 
@@ -409,6 +437,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
           unitType: _displayedUnit,
           lines: widget.outingProvider.displayedDraft,
           productName: _productName,
+          productDropdownLabel: _productDropdownLabel,
+          productCategoryColor: _productCategoryColor,
           onUnitChanged: (value) => setState(() => _displayedUnit = value),
           onAdd: (productId, value) => _addLine(
             step: OutingStepType.displayed,
@@ -441,6 +471,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
               unitType: _returnedUnit,
               lines: widget.outingProvider.returnedDraft,
               productName: _productName,
+              productDropdownLabel: _productDropdownLabel,
+              productCategoryColor: _productCategoryColor,
               onUnitChanged: (value) => setState(() => _returnedUnit = value),
               onAdd: (productId, value) => _addLine(
                 step: OutingStepType.returned,
@@ -465,6 +497,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
           unitType: _discardedUnit,
           lines: widget.outingProvider.discardedDraft,
           productName: _productName,
+          productDropdownLabel: _productDropdownLabel,
+          productCategoryColor: _productCategoryColor,
           onUnitChanged: (value) => setState(() => _discardedUnit = value),
           onAdd: (productId, value) => _addLine(
             step: OutingStepType.discarded,
@@ -496,6 +530,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
               unitType: _replacedUnit,
               lines: widget.outingProvider.replacedDraft,
               productName: _productName,
+              productDropdownLabel: _productDropdownLabel,
+              productCategoryColor: _productCategoryColor,
               onUnitChanged: (value) => setState(() => _replacedUnit = value),
               onAdd: (productId, value) => _addLine(
                 step: OutingStepType.replaced,
@@ -646,6 +682,8 @@ class _StepLineEntry extends StatefulWidget {
     required this.unitType,
     required this.lines,
     required this.productName,
+    required this.productDropdownLabel,
+    required this.productCategoryColor,
     required this.onUnitChanged,
     required this.onAdd,
     required this.onRemoveLine,
@@ -657,6 +695,8 @@ class _StepLineEntry extends StatefulWidget {
   final UnitType unitType;
   final List<OutingLine> lines;
   final String Function(String) productName;
+  final String Function(Product) productDropdownLabel;
+  final Color Function(Product) productCategoryColor;
   final ValueChanged<UnitType> onUnitChanged;
   final bool Function(String productId, double value) onAdd;
   final ValueChanged<int> onRemoveLine;
@@ -779,7 +819,26 @@ class _StepLineEntryState extends State<_StepLineEntry> {
                     for (final product in widget.products)
                       DropdownMenuItem<String>(
                         value: product.id,
-                        child: Text(product.name),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Container(
+                                  width: 10,
+                                  height: 10,
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: widget.productCategoryColor(product),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              TextSpan(text: widget.productDropdownLabel(product)),
+                            ],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
                   onChanged: (value) {

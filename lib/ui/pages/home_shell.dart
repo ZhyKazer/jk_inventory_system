@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
+import 'package:jk_inventory_system/services/backup_service.dart';
 import 'package:jk_inventory_system/ui/pages/activity_log_page.dart';
 import 'package:jk_inventory_system/ui/pages/analytics_page.dart';
 import 'package:jk_inventory_system/ui/pages/batches_page.dart';
@@ -11,6 +13,7 @@ import 'package:jk_inventory_system/ui/pages/categories_page.dart';
 import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
 import 'package:jk_inventory_system/ui/pages/outing_stepper_page.dart';
 import 'package:jk_inventory_system/ui/pages/products_page.dart';
+import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
 
@@ -22,6 +25,10 @@ class HomeShell extends StatefulWidget {
     required this.stockBatchProvider,
     required this.outingProvider,
     required this.activityLogProvider,
+    required this.selectedTheme,
+    required this.onThemeSelected,
+    required this.selectedCustomThemeColor,
+    required this.onCustomThemeColorSelected,
   });
 
   final ActivityLogProvider activityLogProvider;
@@ -29,6 +36,10 @@ class HomeShell extends StatefulWidget {
   final ProductProvider productProvider;
   final StockBatchProvider stockBatchProvider;
   final OutingProvider outingProvider;
+  final AppThemeOption selectedTheme;
+  final ValueChanged<AppThemeOption> onThemeSelected;
+  final Color selectedCustomThemeColor;
+  final ValueChanged<Color> onCustomThemeColorSelected;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -37,6 +48,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
   bool _actionsFabExpanded = false;
+  final BackupService _backupService = BackupService();
 
   final GlobalKey _mainActionsFabKey = GlobalKey();
   final GlobalKey _addProductFabKey = GlobalKey();
@@ -157,6 +169,7 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => OutingStepperPage(
           outingProvider: widget.outingProvider,
           productProvider: widget.productProvider,
+          categoryProvider: widget.categoryProvider,
         ),
       ),
     );
@@ -212,7 +225,7 @@ class _HomeShellState extends State<HomeShell> {
         barrierDismissible: false,
         barrierLabel: 'Help Tour',
         barrierColor: Colors.transparent,
-        pageBuilder: (_, __, ___) => _AnchoredHelpOverlay(
+        pageBuilder: (dialogContext, animation, secondaryAnimation) => _AnchoredHelpOverlay(
           step: step,
           targetRect: targetRect,
           currentStep: index + 1,
@@ -237,6 +250,216 @@ class _HomeShellState extends State<HomeShell> {
     return position & renderBox.size;
   }
 
+  Future<void> _showLoadingWhile(
+    Future<void> Function() action, {
+    required String message,
+  }) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await action();
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _reloadAllProviders() async {
+    await widget.activityLogProvider.load();
+    await widget.categoryProvider.load();
+    await widget.productProvider.load();
+    await widget.stockBatchProvider.load();
+    await widget.outingProvider.load();
+  }
+
+  Future<bool> _confirmRestore({required String sourceLabel}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Restore'),
+        content: Text(
+          'This will overwrite current data with "$sourceLabel". Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed == true;
+  }
+
+  Future<void> _onBackupData() async {
+    try {
+      late BackupCreateResult result;
+      await _showLoadingWhile(
+        () async {
+          result = await _backupService.createBackup();
+        },
+        message: 'Creating backup...',
+      );
+
+      final removed = result.deletedFiles.length;
+      final retentionMessage = removed > 0
+          ? ' Removed $removed old backup(s).'
+          : '';
+      _showMessage('Backup created: ${result.fileName}.$retentionMessage');
+    } on BackupException catch (error) {
+      if (error.message == 'Cannot write backup to the selected folder.') {
+        _showMessage('Backup failed. Storage access is restricted on this folder.');
+      } else {
+        _showMessage(error.message);
+      }
+    } catch (_) {
+      _showMessage('Failed to create backup. Please try again.');
+    }
+  }
+
+  Future<void> _onRestoreData() async {
+    try {
+      final backups = await _backupService.listRecentBackups(limit: 5);
+
+      if (!mounted) return;
+
+      if (backups.isEmpty) {
+        _showMessage('No recent backups found. Use Backup Data or Import Backup.');
+        return;
+      }
+
+      final selected = await showDialog<BackupFileInfo>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Restore Data'),
+          content: SizedBox(
+            width: 460,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: backups.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (_, index) {
+                final backup = backups[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(backup.fileName),
+                  subtitle: Text(
+                    DateFormat('dd/MM/yyyy HH:mm:ss').format(backup.createdAt),
+                  ),
+                  onTap: () => Navigator.of(context).pop(backup),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      );
+
+      if (selected == null) {
+        return;
+      }
+
+      final confirmed = await _confirmRestore(sourceLabel: selected.fileName);
+      if (!confirmed) {
+        return;
+      }
+
+      await _showLoadingWhile(
+        () async {
+          await _backupService.restoreFromQuickBackup(selected.path);
+          await _reloadAllProviders();
+        },
+        message: 'Restoring backup...',
+      );
+
+      _showMessage('Restore completed from ${selected.fileName}.');
+    } on BackupException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Failed to restore backup. Please try again.');
+    }
+  }
+
+  Future<void> _onImportBackup() async {
+    try {
+      final selectedPath = await _backupService.pickBackupFileForImport();
+      if (selectedPath == null) {
+        return;
+      }
+
+      final fileName = selectedPath.split(RegExp(r'[\\/]')).last;
+      final confirmed = await _confirmRestore(sourceLabel: fileName);
+      if (!confirmed) {
+        return;
+      }
+
+      await _showLoadingWhile(
+        () async {
+          await _backupService.restoreFromAnyFilePath(selectedPath);
+          await _reloadAllProviders();
+        },
+        message: 'Importing and restoring backup...',
+      );
+
+      _showMessage('Imported and restored from $fileName.');
+    } on BackupException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Failed to import backup. Please try again.');
+    }
+  }
+
+  Future<void> _onChangeBackupDirectory() async {
+    try {
+      final selectedPath = await _backupService.pickAndSaveBackupDirectory();
+      if (selectedPath == null) {
+        _showMessage('Backup folder change cancelled.');
+        return;
+      }
+
+      _showMessage('Backup folder updated successfully.');
+    } on BackupException catch (error) {
+      _showMessage(error.message);
+    } catch (_) {
+      _showMessage('Failed to change backup folder. Please try again.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -258,8 +481,154 @@ class _HomeShellState extends State<HomeShell> {
 
     final titles = ['Product List', 'Batch List & History', 'Activity Log', 'Analytics'];
 
+    String themeLabel(AppThemeOption option) {
+      return switch (option) {
+        AppThemeOption.dark => 'Dark',
+        AppThemeOption.light => 'Light',
+        AppThemeOption.blue => 'Blue',
+        AppThemeOption.green => 'Green',
+        AppThemeOption.custom => 'Custom',
+      };
+    }
+
+    const customThemePalette = <Color>[
+      Colors.deepPurple,
+      Colors.pink,
+      Colors.red,
+      Colors.orange,
+      Colors.amber,
+      Colors.teal,
+      Colors.cyan,
+      Colors.indigo,
+      Colors.brown,
+      Colors.grey,
+    ];
+
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_currentIndex])),
+      appBar: AppBar(
+        title: Text(titles[_currentIndex]),
+        actions: [
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => Scaffold.of(context).openEndDrawer(),
+              tooltip: 'Settings',
+            ),
+          ),
+        ],
+      ),
+      endDrawer: Drawer(
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              ListTile(
+                title: Text(
+                  'Settings',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: DropdownButtonFormField<AppThemeOption>(
+                  value: widget.selectedTheme,
+                  decoration: const InputDecoration(
+                    labelText: 'Theme',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: AppThemeOption.values
+                      .map(
+                        (option) => DropdownMenuItem<AppThemeOption>(
+                          value: option,
+                          child: Text(themeLabel(option)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    widget.onThemeSelected(value);
+                  },
+                ),
+              ),
+              if (widget.selectedTheme == AppThemeOption.custom)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Custom Color',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: customThemePalette.map((color) {
+                          final isSelected = widget.selectedCustomThemeColor.value == color.value;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(999),
+                            onTap: () => widget.onCustomThemeColorSelected(color),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.onSurface
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      size: 16,
+                                      color: ThemeData.estimateBrightnessForColor(color) ==
+                                              Brightness.dark
+                                          ? Colors.white
+                                          : Colors.black,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              const Divider(height: 24),
+              ListTile(
+                leading: const Icon(Icons.backup_outlined),
+                title: const Text('Backup Data'),
+                subtitle: const Text('Create a JSON backup in your selected folder.'),
+                onTap: _onBackupData,
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('Change Backup Folder'),
+                subtitle: const Text('Pick a different folder for backup files.'),
+                onTap: _onChangeBackupDirectory,
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings_backup_restore_outlined),
+                title: const Text('Restore Data'),
+                subtitle: const Text('Restore from the 5 most recent backups.'),
+                onTap: _onRestoreData,
+              ),
+              ListTile(
+                leading: const Icon(Icons.file_upload_outlined),
+                title: const Text('Import Backup'),
+                subtitle: const Text('Import and restore from any JSON backup file.'),
+                onTap: _onImportBackup,
+              ),
+            ],
+          ),
+        ),
+      ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         switchInCurve: Curves.easeOutCubic,

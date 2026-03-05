@@ -1,12 +1,11 @@
 import 'package:hive/hive.dart';
-import 'package:jk_inventory_system/models/unit_type.dart';
 
 class Category {
   Category({
     required this.id,
     required this.name,
     required this.colorHex,
-    required this.defaultUnit,
+    required this.requireProductImage,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -14,7 +13,7 @@ class Category {
   final String id;
   final String name;
   final String colorHex;
-  final UnitType defaultUnit;
+  final bool requireProductImage;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -22,7 +21,7 @@ class Category {
     String? id,
     String? name,
     String? colorHex,
-    UnitType? defaultUnit,
+    bool? requireProductImage,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -30,7 +29,7 @@ class Category {
       id: id ?? this.id,
       name: name ?? this.name,
       colorHex: colorHex ?? this.colorHex,
-      defaultUnit: defaultUnit ?? this.defaultUnit,
+      requireProductImage: requireProductImage ?? this.requireProductImage,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -47,26 +46,25 @@ class CategoryAdapter extends TypeAdapter<Category> {
     final name = reader.readString();
     final colorHex = reader.readString();
 
-    // Next int may be either the `defaultUnit` index (new format) or the createdAt millis (old format).
+    // Next int may be:
+    // - createdAt millis (very old format),
+    // - legacy default unit index (0/1),
+    // - require image flag (0=false, 2=true).
     final maybe = reader.readInt();
     const timestampThreshold = 100000000000; // 1e11
 
-    UnitType defaultUnit;
+    bool requireProductImage;
     int createdMillis;
     int updatedMillis;
 
     if (maybe >= timestampThreshold) {
       // Old format: maybe is createdAt
-      defaultUnit = UnitType.quantity;
+      requireProductImage = false;
       createdMillis = maybe;
       updatedMillis = reader.readInt();
     } else {
-      // New format: maybe is unit index
-      if (maybe >= 0 && maybe < UnitType.values.length) {
-        defaultUnit = UnitType.values[maybe];
-      } else {
-        defaultUnit = UnitType.quantity;
-      }
+      // Legacy unit index values (0/1) are treated as false.
+      requireProductImage = maybe == 2;
       createdMillis = reader.readInt();
       updatedMillis = reader.readInt();
     }
@@ -75,7 +73,7 @@ class CategoryAdapter extends TypeAdapter<Category> {
       id: id,
       name: name,
       colorHex: colorHex,
-      defaultUnit: defaultUnit,
+      requireProductImage: requireProductImage,
       createdAt: DateTime.fromMillisecondsSinceEpoch(createdMillis),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedMillis),
     );
@@ -87,8 +85,8 @@ class CategoryAdapter extends TypeAdapter<Category> {
       ..writeString(obj.id)
       ..writeString(obj.name)
       ..writeString(obj.colorHex)
-      // write enum index for default unit
-      ..writeInt(obj.defaultUnit.index)
+      // 0 = false, 2 = true (reserves 0/1 to avoid legacy unit index collision)
+      ..writeInt(obj.requireProductImage ? 2 : 0)
       ..writeInt(obj.createdAt.millisecondsSinceEpoch)
       ..writeInt(obj.updatedAt.millisecondsSinceEpoch);
   }

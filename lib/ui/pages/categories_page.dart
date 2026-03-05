@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/models/category.dart';
-import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
@@ -16,10 +15,7 @@ class CategoriesPage extends StatelessWidget {
   final CategoryProvider categoryProvider;
   final ProductProvider productProvider;
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    Category category,
-  ) async {
+  Future<void> _confirmDelete(BuildContext context, Category category) async {
     final usedByProduct = productProvider.items.any(
       (item) => item.categoryId == category.id,
     );
@@ -30,7 +26,9 @@ class CategoriesPage extends StatelessWidget {
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Cannot delete category because products are using it.'),
+          content: Text(
+            'Cannot delete category because products are using it.',
+          ),
         ),
       );
       return;
@@ -83,7 +81,9 @@ class CategoriesPage extends StatelessWidget {
                   backgroundColor: colorFromHex(category.colorHex),
                 ),
                 title: Text(category.name),
-                subtitle: Text(category.defaultUnit.label),
+                subtitle: Text(
+                  'Require Product Image: ${category.requireProductImage ? 'On' : 'Off'}',
+                ),
                 trailing: Wrap(
                   spacing: 4,
                   children: [
@@ -107,10 +107,8 @@ class CategoriesPage extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => showCategoryFormSheet(
-          context,
-          provider: categoryProvider,
-        ),
+        onPressed: () =>
+            showCategoryFormSheet(context, provider: categoryProvider),
         child: const Icon(Icons.add),
       ),
     );

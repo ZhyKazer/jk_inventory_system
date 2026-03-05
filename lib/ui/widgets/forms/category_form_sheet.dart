@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart' show ColorPicker;
 import 'dart:math';
 import 'package:jk_inventory_system/models/category.dart';
-import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart' as color_utils;
 
@@ -14,10 +13,8 @@ Future<void> showCategoryFormSheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (context) => _CategoryFormSheet(
-      provider: provider,
-      editing: editing,
-    ),
+    builder: (context) =>
+        _CategoryFormSheet(provider: provider, editing: editing),
   );
 }
 
@@ -35,7 +32,7 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late Color _selectedColor;
-  late UnitType _selectedUnit;
+  late bool _requireProductImage;
   bool _isSaving = false;
 
   @override
@@ -43,9 +40,9 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
     super.initState();
     _nameController = TextEditingController(text: widget.editing?.name ?? '');
     _selectedColor = widget.editing != null
-      ? color_utils.colorFromHex(widget.editing!.colorHex)
-      : Color(0xFF000000 | Random().nextInt(0xFFFFFF));
-    _selectedUnit = widget.editing?.defaultUnit ?? UnitType.quantity;
+        ? color_utils.colorFromHex(widget.editing!.colorHex)
+        : Color(0xFF000000 | Random().nextInt(0xFFFFFF));
+    _requireProductImage = widget.editing?.requireProductImage ?? false;
   }
 
   @override
@@ -62,21 +59,26 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
     final colorHex = color_utils.colorToHex(_selectedColor);
 
     final error = widget.editing == null
-      ? await widget.provider.createWithUnit(
-        name: name, colorHex: colorHex, defaultUnit: _selectedUnit)
-      : await widget.provider.update(
-        id: widget.editing!.id,
-        name: name,
-        colorHex: colorHex,
-        defaultUnit: _selectedUnit,
-        );
+        ? await widget.provider.create(
+            name: name,
+            colorHex: colorHex,
+            requireProductImage: _requireProductImage,
+          )
+        : await widget.provider.update(
+            id: widget.editing!.id,
+            name: name,
+            colorHex: colorHex,
+            requireProductImage: _requireProductImage,
+          );
 
     if (!mounted) return;
 
     setState(() => _isSaving = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -105,20 +107,13 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
-            const Text('Default Unit'),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<UnitType>(
-              initialValue: _selectedUnit,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: UnitType.values
-                  .map(
-                    (u) => DropdownMenuItem<UnitType>(
-                      value: u,
-                      child: Text(u.label),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedUnit = v ?? UnitType.quantity),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Require Product Image'),
+              subtitle: Text(_requireProductImage ? 'On' : 'Off'),
+              value: _requireProductImage,
+              onChanged: (value) =>
+                  setState(() => _requireProductImage = value),
             ),
             const SizedBox(height: 16),
             TextFormField(

@@ -52,8 +52,10 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
     final currentId = _rows[rowIndex].productId;
 
     return products
-        .where((product) =>
-            product.id == currentId || !selectedByOthers.contains(product.id))
+        .where(
+          (product) =>
+              product.id == currentId || !selectedByOthers.contains(product.id),
+        )
         .toList();
   }
 
@@ -76,7 +78,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
     if (!_canAddMoreRows(products)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All available products are already in the batch list.'),
+          content: Text(
+            'All available products are already in the batch list.',
+          ),
         ),
       );
       return;
@@ -102,27 +106,7 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
   }
 
   UnitType _unitForProduct(String productId) {
-    if (productId.isEmpty) return UnitType.quantity;
-
-    Product? matchedProduct;
-    for (final product in widget.productProvider.items) {
-      if (product.id == productId) {
-        matchedProduct = product;
-        break;
-      }
-    }
-
-    if (matchedProduct == null) return UnitType.quantity;
-
-    Category? matchedCategory;
-    for (final category in widget.categoryProvider.items) {
-      if (category.id == matchedProduct.categoryId) {
-        matchedCategory = category;
-        break;
-      }
-    }
-
-    return matchedCategory?.defaultUnit ?? UnitType.quantity;
+    return UnitType.quantity;
   }
 
   void _removeRow(int index) {
@@ -158,7 +142,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
       if (!seenProductIds.add(row.productId)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Duplicate product detected. Each product can only appear once per batch.'),
+            content: Text(
+              'Duplicate product detected. Each product can only appear once per batch.',
+            ),
           ),
         );
         return;
@@ -205,7 +191,9 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
     setState(() => _isSaving = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -235,7 +223,7 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  'Tap "Add Product to Batch" to add items. Unit type follows the selected product category.',
+                  'Tap "Add Product to Batch" to add items.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
@@ -246,11 +234,15 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
                     products: _availableProductsForRow(index, products),
                     onDelete: _rows.length > 1 ? () => _removeRow(index) : null,
                     onProductChanged: (productId) {
-                      final selectedByOthers = _selectedProductIds(excludingRowIndex: index);
+                      final selectedByOthers = _selectedProductIds(
+                        excludingRowIndex: index,
+                      );
                       if (selectedByOthers.contains(productId)) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('This product is already in the list.'),
+                            content: Text(
+                              'This product is already in the list.',
+                            ),
                           ),
                         );
                         return;
@@ -261,9 +253,13 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
                         _rows[index].unitType = _unitForProduct(productId);
 
                         if (_rows[index].unitType == UnitType.quantity) {
-                          final val = double.tryParse(_rows[index].valueController.text);
+                          final val = double.tryParse(
+                            _rows[index].valueController.text,
+                          );
                           if (val != null && val % 1 != 0) {
-                            _rows[index].valueController.text = val.toInt().toString();
+                            _rows[index].valueController.text = val
+                                .toInt()
+                                .toString();
                           }
                         }
                       });
@@ -315,7 +311,10 @@ class _BatchRowCard extends StatelessWidget {
                 Text('Item ${index + 1}'),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.secondaryContainer,
                     borderRadius: BorderRadius.circular(999),
@@ -373,7 +372,9 @@ class _BatchRowCard extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: row.originalPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [_DecimalTextInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Capital',
@@ -386,7 +387,9 @@ class _BatchRowCard extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: row.sellingPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [_DecimalTextInputFormatter()],
                     decoration: const InputDecoration(
                       labelText: 'Sell',
@@ -406,7 +409,10 @@ class _BatchRowCard extends StatelessWidget {
 
 class _DecimalTextInputFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final reg = RegExp(r'^\d*\.?\d*$');
     if (reg.hasMatch(newValue.text)) {
       return newValue;
@@ -416,10 +422,7 @@ class _DecimalTextInputFormatter extends TextInputFormatter {
 }
 
 class _BatchItemDraft {
-  _BatchItemDraft({
-    required this.productId,
-    required this.unitType,
-  });
+  _BatchItemDraft({required this.productId, required this.unitType});
 
   String productId;
   UnitType unitType;

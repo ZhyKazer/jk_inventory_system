@@ -6,6 +6,13 @@ import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 
+class ProductCreateDraft {
+  ProductCreateDraft({required this.name, this.imagePath});
+
+  final String name;
+  final String? imagePath;
+}
+
 class ProductProvider extends ChangeNotifier {
   ProductProvider(this._repository, this._activityLogProvider);
 
@@ -81,6 +88,8 @@ class ProductProvider extends ChangeNotifier {
   Future<String?> create({
     required String name,
     required String categoryId,
+    String? imagePath,
+    bool requireProductImage = false,
   }) async {
     final nameError = validateName(name);
     if (nameError != null) return nameError;
@@ -88,11 +97,20 @@ class ProductProvider extends ChangeNotifier {
     final categoryError = validateCategory(categoryId);
     if (categoryError != null) return categoryError;
 
+    final normalizedImagePath = imagePath?.trim();
+    if (requireProductImage &&
+        (normalizedImagePath == null || normalizedImagePath.isEmpty)) {
+      return 'Product image is required.';
+    }
+
     final now = DateTime.now();
     final product = Product(
       id: _uuid.v4(),
       categoryId: categoryId,
       name: name.trim(),
+      imagePath: (normalizedImagePath == null || normalizedImagePath.isEmpty)
+          ? null
+          : normalizedImagePath,
       createdAt: now,
       updatedAt: now,
     );
@@ -109,35 +127,50 @@ class ProductProvider extends ChangeNotifier {
   }
 
   Future<String?> createMany({
-    required List<String> names,
+    required List<ProductCreateDraft> drafts,
     required String categoryId,
+    bool requireProductImage = false,
   }) async {
     final categoryError = validateCategory(categoryId);
     if (categoryError != null) return categoryError;
-    if (names.isEmpty) return 'At least one product name is required.';
+    if (drafts.isEmpty) return 'At least one product name is required.';
 
-    final normalized = names.map((name) => name.trim()).where((name) => name.isNotEmpty).toList();
+    final normalized = drafts
+        .map(
+          (draft) => ProductCreateDraft(
+            name: draft.name.trim(),
+            imagePath: draft.imagePath?.trim(),
+          ),
+        )
+        .where((draft) => draft.name.isNotEmpty)
+        .toList();
     if (normalized.isEmpty) return 'At least one product name is required.';
 
     final existingNames = _items.map((item) => item.name.toLowerCase()).toSet();
     final seenInInput = <String>{};
 
-    for (final name in normalized) {
-      final lowered = name.toLowerCase();
+    for (final draft in normalized) {
+      final lowered = draft.name.toLowerCase();
       if (!seenInInput.add(lowered)) {
-        return 'Duplicate product in input: "$name".';
+        return 'Duplicate product in input: "${draft.name}".';
       }
       if (existingNames.contains(lowered)) {
-        return 'Product name already exists: "$name".';
+        return 'Product name already exists: "${draft.name}".';
+      }
+
+      if (requireProductImage &&
+          (draft.imagePath == null || draft.imagePath!.isEmpty)) {
+        return 'Product image is required for "${draft.name}".';
       }
     }
 
     final now = DateTime.now();
-    for (final name in normalized) {
+    for (final draft in normalized) {
       final product = Product(
         id: _uuid.v4(),
         categoryId: categoryId,
-        name: name,
+        name: draft.name,
+        imagePath: draft.imagePath,
         createdAt: now,
         updatedAt: now,
       );

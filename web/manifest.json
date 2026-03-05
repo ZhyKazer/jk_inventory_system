@@ -1,6 +1,6 @@
 {
-    "name": "jk_inventory_system",
-    "short_name": "jk_inventory_system",
+    "name": "bnm",
+    "short_name": "bnm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

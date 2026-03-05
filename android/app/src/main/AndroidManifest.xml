@@ -6,7 +6,7 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <application
-        android:label="JK Inventory"
+        android:label="B&amp;M"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

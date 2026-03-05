@@ -133,7 +133,7 @@ class _InventoryAppState extends State<InventoryApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'JK Inventory System',
+      title: 'bnm',
       debugShowCheckedModeBanner: false,
       theme: _themeFromSelection(),
       home: HomeShell(

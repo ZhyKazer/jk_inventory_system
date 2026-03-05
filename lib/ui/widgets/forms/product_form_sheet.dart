@@ -1,7 +1,14 @@
+import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image/image.dart' as img;
 import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 Future<void> showProductFormSheet(
   BuildContext context, {
@@ -42,17 +49,29 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final List<TextEditingController> _nameControllers;
+  late final List<String?> _imagePaths;
   String _selectedCategoryId = '';
   bool _isSaving = false;
 
   bool get _isCreateMode => widget.editing == null;
+
+  bool get _selectedCategoryRequiresImage {
+    for (final category in widget.categories) {
+      if (category.id == _selectedCategoryId) {
+        return category.requireProductImage;
+      }
+    }
+    return false;
+  }
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.editing?.name ?? '');
     _nameControllers = [TextEditingController()];
-    _selectedCategoryId = widget.editing?.categoryId ??
+    _imagePaths = [null];
+    _selectedCategoryId =
+        widget.editing?.categoryId ??
         (widget.categories.isNotEmpty ? widget.categories.first.id : '');
   }
 
@@ -68,6 +87,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   void _addNameField() {
     setState(() {
       _nameControllers.add(TextEditingController());
+      _imagePaths.add(null);
     });
   }
 
@@ -76,14 +96,124 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     setState(() {
       final controller = _nameControllers.removeAt(index);
       controller.dispose();
+      _imagePaths.removeAt(index);
     });
   }
 
-  List<String> _bulkNames() {
-    return _nameControllers
-        .map((controller) => controller.text.trim())
-        .where((name) => name.isNotEmpty)
-        .toList();
+  List<ProductCreateDraft> _bulkDrafts() {
+    final drafts = <ProductCreateDraft>[];
+    for (var i = 0; i < _nameControllers.length; i++) {
+      final name = _nameControllers[i].text.trim();
+      if (name.isEmpty) continue;
+      drafts.add(ProductCreateDraft(name: name, imagePath: _imagePaths[i]));
+    }
+    return drafts;
+  }
+
+  Future<void> _pickImage(int index) async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+
+    if (!mounted) return;
+
+    final selectedPath = picked?.files.single.path;
+    if (selectedPath == null || selectedPath.trim().isEmpty) return;
+
+    final processedPath = await _processAndStoreImage(selectedPath, index);
+    if (!mounted) return;
+    if (processedPath == null) return;
+
+    setState(() {
+      _imagePaths[index] = processedPath;
+    });
+  }
+
+  Future<String?> _processAndStoreImage(String sourcePath, int index) async {
+    try {
+      final sourceBytes = await File(sourcePath).readAsBytes();
+      final decoded = img.decodeImage(sourceBytes);
+      if (decoded == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unable to read selected image.')),
+          );
+        }
+        return null;
+      }
+
+      final minSide = math.min(decoded.width, decoded.height);
+      final x = (decoded.width - minSide) ~/ 2;
+      final y = (decoded.height - minSide) ~/ 2;
+
+      var squared = img.copyCrop(
+        decoded,
+        x: x,
+        y: y,
+        width: minSide,
+        height: minSide,
+      );
+
+      if (squared.width > 1024) {
+        squared = img.copyResize(
+          squared,
+          width: 1024,
+          height: 1024,
+          interpolation: img.Interpolation.average,
+        );
+      }
+
+      final outputBytes = img.encodePng(squared, level: 9);
+
+      final docsDir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory(p.join(docsDir.path, 'product_images'));
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+
+      final fileName =
+          'product_${DateTime.now().microsecondsSinceEpoch}_$index.png';
+      final outputPath = p.join(imagesDir.path, fileName);
+      await File(outputPath).writeAsBytes(outputBytes, flush: true);
+      return outputPath;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to process selected image.')),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _showLargePreview(String imagePath) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: SizedBox(
+            width: 320,
+            height: 320,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.file(
+                File(imagePath),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: Theme.of(context).colorScheme.error,
+                    size: 36,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -92,8 +222,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
 
     final error = _isCreateMode
         ? await widget.provider.createMany(
-            names: _bulkNames(),
+            drafts: _bulkDrafts(),
             categoryId: _selectedCategoryId,
+            requireProductImage: _selectedCategoryRequiresImage,
           )
         : await widget.provider.update(
             id: widget.editing!.id,
@@ -106,7 +237,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     setState(() => _isSaving = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -117,7 +250,10 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.viewInsetsOf(context);
     final screenSize = MediaQuery.sizeOf(context);
-    final maxHeight = (screenSize.height - viewInsets.bottom - 48).clamp(320.0, 620.0);
+    final maxHeight = (screenSize.height - viewInsets.bottom - 48).clamp(
+      320.0,
+      620.0,
+    );
 
     return AnimatedPadding(
       duration: const Duration(milliseconds: 150),
@@ -139,8 +275,9 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue:
-                      _selectedCategoryId.isEmpty ? null : _selectedCategoryId,
+                  initialValue: _selectedCategoryId.isEmpty
+                      ? null
+                      : _selectedCategoryId,
                   decoration: const InputDecoration(
                     labelText: 'Category',
                     border: OutlineInputBorder(),
@@ -167,57 +304,116 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                               for (var i = 0; i < _nameControllers.length; i++)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
-                                  child: Row(
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Expanded(
-                                        child: TextFormField(
-                                          controller: _nameControllers[i],
-                                          decoration: InputDecoration(
-                                            labelText: 'Product Name ${i + 1}',
-                                            border:
-                                                const OutlineInputBorder(),
+                                      Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: TextFormField(
+                                              controller: _nameControllers[i],
+                                              decoration: InputDecoration(
+                                                labelText:
+                                                    'Product Name ${i + 1}',
+                                                border:
+                                                    const OutlineInputBorder(),
+                                              ),
+                                              validator: (value) {
+                                                final name = (value ?? '')
+                                                    .trim();
+                                                if (name.isEmpty) {
+                                                  return 'Product name is required.';
+                                                }
+
+                                                final existingError = widget
+                                                    .provider
+                                                    .validateName(name);
+                                                if (existingError != null) {
+                                                  return existingError;
+                                                }
+
+                                                final duplicateInInput =
+                                                    _nameControllers
+                                                        .where(
+                                                          (controller) =>
+                                                              controller.text
+                                                                  .trim()
+                                                                  .toLowerCase() ==
+                                                              name.toLowerCase(),
+                                                        )
+                                                        .length;
+                                                if (duplicateInInput > 1) {
+                                                  return 'Duplicate product in form.';
+                                                }
+
+                                                if (_selectedCategoryRequiresImage &&
+                                                    (_imagePaths[i] == null ||
+                                                        _imagePaths[i]!
+                                                            .isEmpty)) {
+                                                  return 'Product photo is required.';
+                                                }
+
+                                                return null;
+                                              },
+                                            ),
                                           ),
-                                          validator: (value) {
-                                            final name = (value ?? '').trim();
-                                            if (name.isEmpty) {
-                                              return 'Product name is required.';
-                                            }
-
-                                            final existingError = widget
-                                                .provider
-                                                .validateName(name);
-                                            if (existingError != null) {
-                                              return existingError;
-                                            }
-
-                                            final duplicateInInput =
-                                                _nameControllers
-                                                    .where(
-                                                      (controller) => controller
-                                                          .text
-                                                          .trim()
-                                                          .toLowerCase() ==
-                                                      name.toLowerCase(),
-                                                    )
-                                                    .length;
-                                            if (duplicateInInput > 1) {
-                                              return 'Duplicate product in form.';
-                                            }
-
-                                            return null;
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        onPressed: _nameControllers.length > 1
-                                            ? () => _removeNameField(i)
-                                            : null,
-                                        icon: const Icon(
-                                          Icons.remove_circle_outline,
-                                        ),
+                                          const SizedBox(width: 8),
+                                          OutlinedButton(
+                                            onPressed: () => _pickImage(i),
+                                            onLongPress:
+                                                _imagePaths[i] != null &&
+                                                    _imagePaths[i]!.isNotEmpty
+                                                ? () => _showLargePreview(
+                                                    _imagePaths[i]!,
+                                                  )
+                                                : null,
+                                            style: OutlinedButton.styleFrom(
+                                              minimumSize: const Size(40, 40),
+                                              padding: const EdgeInsets.all(8),
+                                            ),
+                                            child: _imagePaths[i] == null
+                                                ? const Icon(
+                                                    Icons.add_a_photo_outlined,
+                                                  )
+                                                : ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                    child: SizedBox(
+                                                      width: 37,
+                                                      height: 37,
+                                                      child: Image.file(
+                                                        File(_imagePaths[i]!),
+                                                        fit: BoxFit.cover,
+                                                        errorBuilder:
+                                                            (
+                                                              _,
+                                                              _,
+                                                              _,
+                                                            ) => const Icon(
+                                                              Icons
+                                                                  .broken_image_outlined,
+                                                              size: 18,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          IconButton(
+                                            onPressed:
+                                                _nameControllers.length > 1
+                                                ? () => _removeNameField(i)
+                                                : null,
+                                            icon: const Icon(
+                                              Icons.remove_circle_outline,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),

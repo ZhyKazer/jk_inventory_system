@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
@@ -225,12 +226,13 @@ class _HomeShellState extends State<HomeShell> {
         barrierDismissible: false,
         barrierLabel: 'Help Tour',
         barrierColor: Colors.transparent,
-        pageBuilder: (dialogContext, animation, secondaryAnimation) => _AnchoredHelpOverlay(
-          step: step,
-          targetRect: targetRect,
-          currentStep: index + 1,
-          totalSteps: steps.length,
-        ),
+        pageBuilder: (dialogContext, animation, secondaryAnimation) =>
+            _AnchoredHelpOverlay(
+              step: step,
+              targetRect: targetRect,
+              currentStep: index + 1,
+              totalSteps: steps.length,
+            ),
       );
 
       if (shouldContinue != true) {
@@ -253,6 +255,7 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _showLoadingWhile(
     Future<void> Function() action, {
     required String message,
+    ValueListenable<String>? messageListenable,
   }) async {
     showDialog<void>(
       context: context,
@@ -268,7 +271,14 @@ class _HomeShellState extends State<HomeShell> {
                 child: CircularProgressIndicator(strokeWidth: 2.2),
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text(message)),
+              Expanded(
+                child: messageListenable == null
+                    ? Text(message)
+                    : ValueListenableBuilder<String>(
+                        valueListenable: messageListenable,
+                        builder: (_, value, __) => Text(value),
+                      ),
+              ),
             ],
           ),
         ),
@@ -286,7 +296,9 @@ class _HomeShellState extends State<HomeShell> {
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _reloadAllProviders() async {
@@ -322,13 +334,20 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _onBackupData() async {
+    final progressMessage = ValueNotifier<String>('saving json information');
     try {
       late BackupCreateResult result;
       await _showLoadingWhile(
         () async {
-          result = await _backupService.createBackup();
+          result = await _backupService.createBackup(
+            onProgress: (statusMessage) {
+              if (!mounted) return;
+              progressMessage.value = statusMessage;
+            },
+          );
         },
         message: 'Creating backup...',
+        messageListenable: progressMessage,
       );
 
       final removed = result.deletedFiles.length;
@@ -338,12 +357,16 @@ class _HomeShellState extends State<HomeShell> {
       _showMessage('Backup created: ${result.fileName}.$retentionMessage');
     } on BackupException catch (error) {
       if (error.message == 'Cannot write backup to the selected folder.') {
-        _showMessage('Backup failed. Storage access is restricted on this folder.');
+        _showMessage(
+          'Backup failed. Storage access is restricted on this folder.',
+        );
       } else {
         _showMessage(error.message);
       }
     } catch (_) {
       _showMessage('Failed to create backup. Please try again.');
+    } finally {
+      progressMessage.dispose();
     }
   }
 
@@ -354,7 +377,9 @@ class _HomeShellState extends State<HomeShell> {
       if (!mounted) return;
 
       if (backups.isEmpty) {
-        _showMessage('No recent backups found. Use Backup Data or Import Backup.');
+        _showMessage(
+          'No recent backups found. Use Backup Data or Import Backup.',
+        );
         return;
       }
 
@@ -399,13 +424,10 @@ class _HomeShellState extends State<HomeShell> {
         return;
       }
 
-      await _showLoadingWhile(
-        () async {
-          await _backupService.restoreFromQuickBackup(selected.path);
-          await _reloadAllProviders();
-        },
-        message: 'Restoring backup...',
-      );
+      await _showLoadingWhile(() async {
+        await _backupService.restoreFromQuickBackup(selected.path);
+        await _reloadAllProviders();
+      }, message: 'Restoring backup...');
 
       _showMessage('Restore completed from ${selected.fileName}.');
     } on BackupException catch (error) {
@@ -428,13 +450,10 @@ class _HomeShellState extends State<HomeShell> {
         return;
       }
 
-      await _showLoadingWhile(
-        () async {
-          await _backupService.restoreFromAnyFilePath(selectedPath);
-          await _reloadAllProviders();
-        },
-        message: 'Importing and restoring backup...',
-      );
+      await _showLoadingWhile(() async {
+        await _backupService.restoreFromAnyFilePath(selectedPath);
+        await _reloadAllProviders();
+      }, message: 'Importing and restoring backup...');
 
       _showMessage('Imported and restored from $fileName.');
     } on BackupException catch (error) {
@@ -479,7 +498,12 @@ class _HomeShellState extends State<HomeShell> {
       ),
     ];
 
-    final titles = ['Product List', 'Batch List & History', 'Activity Log', 'Analytics'];
+    final titles = [
+      'Product List',
+      'Batch List & History',
+      'Activity Log',
+      'Analytics',
+    ];
 
     String themeLabel(AppThemeOption option) {
       return switch (option) {
@@ -566,10 +590,13 @@ class _HomeShellState extends State<HomeShell> {
                         spacing: 8,
                         runSpacing: 8,
                         children: customThemePalette.map((color) {
-                          final isSelected = widget.selectedCustomThemeColor.value == color.value;
+                          final isSelected =
+                              widget.selectedCustomThemeColor.value ==
+                              color.value;
                           return InkWell(
                             borderRadius: BorderRadius.circular(999),
-                            onTap: () => widget.onCustomThemeColorSelected(color),
+                            onTap: () =>
+                                widget.onCustomThemeColorSelected(color),
                             child: Container(
                               width: 28,
                               height: 28,
@@ -587,7 +614,10 @@ class _HomeShellState extends State<HomeShell> {
                                   ? Icon(
                                       Icons.check,
                                       size: 16,
-                                      color: ThemeData.estimateBrightnessForColor(color) ==
+                                      color:
+                                          ThemeData.estimateBrightnessForColor(
+                                                color,
+                                              ) ==
                                               Brightness.dark
                                           ? Colors.white
                                           : Colors.black,
@@ -604,13 +634,17 @@ class _HomeShellState extends State<HomeShell> {
               ListTile(
                 leading: const Icon(Icons.backup_outlined),
                 title: const Text('Backup Data'),
-                subtitle: const Text('Create a JSON backup in your selected folder.'),
+                subtitle: const Text(
+                  'Create a JSON backup in your selected folder.',
+                ),
                 onTap: _onBackupData,
               ),
               ListTile(
                 leading: const Icon(Icons.folder_open_outlined),
                 title: const Text('Change Backup Folder'),
-                subtitle: const Text('Pick a different folder for backup files.'),
+                subtitle: const Text(
+                  'Pick a different folder for backup files.',
+                ),
                 onTap: _onChangeBackupDirectory,
               ),
               ListTile(
@@ -622,7 +656,9 @@ class _HomeShellState extends State<HomeShell> {
               ListTile(
                 leading: const Icon(Icons.file_upload_outlined),
                 title: const Text('Import Backup'),
-                subtitle: const Text('Import and restore from any JSON backup file.'),
+                subtitle: const Text(
+                  'Import and restore from any JSON backup file.',
+                ),
                 onTap: _onImportBackup,
               ),
             ],

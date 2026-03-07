@@ -364,9 +364,6 @@ class _ProductsPageState extends State<ProductsPage> {
         final categories = widget.categoryProvider.items;
         final productIds = products.map((product) => product.id).toSet();
         _selectedProductIds.removeWhere((id) => !productIds.contains(id));
-        final categoryById = {
-          for (final category in categories) category.id: category,
-        };
         final categoryNameById = {
           for (final category in categories) category.id: category.name,
         };
@@ -561,19 +558,46 @@ class _ProductsPageState extends State<ProductsPage> {
                             if (category == null)
                               const Text('No category')
                             else
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 12,
-                                    height: 12,
-                                    margin: const EdgeInsets.only(right: 8),
-                                    decoration: BoxDecoration(
-                                      color: colorFromHex(category.colorHex),
-                                      shape: BoxShape.circle,
+                              Builder(
+                                builder: (context) {
+                                  final categoryColor = colorFromHex(
+                                    category!.colorHex,
+                                  );
+                                  final useDarkText =
+                                      ThemeData.estimateBrightnessForColor(
+                                        categoryColor,
+                                      ) ==
+                                      Brightness.light;
+
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
                                     ),
-                                  ),
-                                  Text(category.name),
-                                ],
+                                    decoration: BoxDecoration(
+                                      color: categoryColor.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: categoryColor.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      category.name,
+                                      style: TextStyle(
+                                        color: useDarkText
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface
+                                            : categoryColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             const SizedBox(height: 4),
                             Text(

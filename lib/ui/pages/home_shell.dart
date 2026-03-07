@@ -412,15 +412,6 @@ class _HomeShellState extends State<HomeShell> {
           ? ' Removed $removed old backup(s).'
           : '';
       await _showBackupConfirmation(result, retentionMessage);
-    } on BackupException catch (error) {
-    } on BackupException catch (error) {
-      if (error.message == 'Cannot write backup to the selected folder.') {
-        _showMessage(
-          'Backup failed. Storage access is restricted on this folder.',
-        );
-      } else {
-        _showMessage(error.message);
-      }
     } catch (_) {
       _showMessage('Failed to create backup. Please try again.');
     } finally {
@@ -536,6 +527,112 @@ class _HomeShellState extends State<HomeShell> {
     } catch (_) {
       _showMessage('Failed to change backup folder. Please try again.');
     }
+  }
+
+  Widget _buildAnimatedActionButton({
+    required int index,
+    required Widget child,
+  }) {
+    final duration = Duration(milliseconds: 300 + (index * 35));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AnimatedSlide(
+        duration: duration,
+        curve: Curves.easeOutCubic,
+        offset: _actionsFabExpanded ? Offset.zero : const Offset(0, 0.2),
+        child: AnimatedOpacity(
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          opacity: _actionsFabExpanded ? 1 : 0,
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandableActionButtons() {
+    return ClipRect(
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: _actionsFabExpanded
+              ? const BoxConstraints()
+              : const BoxConstraints(maxHeight: 0),
+          child: IgnorePointer(
+            ignoring: !_actionsFabExpanded,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildAnimatedActionButton(
+                  index: 0,
+                  child: FloatingActionButton.extended(
+                    key: _addProductFabKey,
+                    heroTag: 'addProductFab',
+                    onPressed: _onAddProduct,
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    label: const Text('Add Product'),
+                  ),
+                ),
+                _buildAnimatedActionButton(
+                  index: 1,
+                  child: FloatingActionButton.extended(
+                    key: _addCategoryFabKey,
+                    heroTag: 'addCategoryFab',
+                    onPressed: _onAddCategory,
+                    icon: const Icon(Icons.category_outlined),
+                    label: const Text('Add Category'),
+                  ),
+                ),
+                _buildAnimatedActionButton(
+                  index: 2,
+                  child: FloatingActionButton.extended(
+                    key: _addBatchFabKey,
+                    heroTag: 'addBatchFab',
+                    onPressed: _onAddBatch,
+                    icon: const Icon(Icons.settings_backup_restore_outlined),
+                    label: const Text('Add Stock Batch'),
+                  ),
+                ),
+                _buildAnimatedActionButton(
+                  index: 3,
+                  child: FloatingActionButton.extended(
+                    key: _outingFlowFabKey,
+                    heroTag: 'outingFlowFab',
+                    onPressed: _onStartOuting,
+                    icon: const Icon(Icons.format_list_numbered_rtl_outlined),
+                    label: const Text('Start Outing Flow'),
+                  ),
+                ),
+                _buildAnimatedActionButton(
+                  index: 4,
+                  child: FloatingActionButton.extended(
+                    key: _manageCategoriesFabKey,
+                    heroTag: 'manageCategoriesFab',
+                    onPressed: _onManageCategories,
+                    icon: const Icon(Icons.list_alt_outlined),
+                    label: const Text('Manage Categories'),
+                  ),
+                ),
+                _buildAnimatedActionButton(
+                  index: 5,
+                  child: FloatingActionButton.extended(
+                    key: _helpFabKey,
+                    heroTag: 'helpFab',
+                    onPressed: _onHelpInActionBar,
+                    icon: const Icon(Icons.question_answer_rounded),
+                    label: const Text('Help'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -777,62 +874,23 @@ class _HomeShellState extends State<HomeShell> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (_actionsFabExpanded) ...[
-            FloatingActionButton.extended(
-              key: _addProductFabKey,
-              heroTag: 'addProductFab',
-              onPressed: _onAddProduct,
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: const Text('Add Product'),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              key: _addCategoryFabKey,
-              heroTag: 'addCategoryFab',
-              onPressed: _onAddCategory,
-              icon: const Icon(Icons.category_outlined),
-              label: const Text('Add Category'),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              key: _addBatchFabKey,
-              heroTag: 'addBatchFab',
-              onPressed: _onAddBatch,
-              icon: const Icon(Icons.settings_backup_restore_outlined),
-              label: const Text('Add Stock Batch'),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              key: _outingFlowFabKey,
-              heroTag: 'outingFlowFab',
-              onPressed: _onStartOuting,
-              icon: const Icon(Icons.format_list_numbered_rtl_outlined),
-              label: const Text('Start Outing Flow'),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              key: _manageCategoriesFabKey,
-              heroTag: 'manageCategoriesFab',
-              onPressed: _onManageCategories,
-              icon: const Icon(Icons.list_alt_outlined),
-              label: const Text('Manage Categories'),
-            ),
-            const SizedBox(height: 12),
-            FloatingActionButton.extended(
-              key: _helpFabKey,
-              heroTag: 'helpFab',
-              onPressed: _onHelpInActionBar,
-              icon: const Icon(Icons.question_answer_rounded),
-              label: const Text('Help'),
-            ),
-            const SizedBox(height: 12),
-          ],
+          _buildExpandableActionButtons(),
           FloatingActionButton(
             key: _mainActionsFabKey,
             heroTag: 'mainActionsFab',
             onPressed: () =>
                 setState(() => _actionsFabExpanded = !_actionsFabExpanded),
-            child: Icon(_actionsFabExpanded ? Icons.close : Icons.add),
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              scale: _actionsFabExpanded ? 1.08 : 1.0,
+              child: AnimatedRotation(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeInOutCubic,
+                turns: _actionsFabExpanded ? 0.125 : 0,
+                child: const Icon(Icons.add),
+              ),
+            ),
           ),
         ],
       ),

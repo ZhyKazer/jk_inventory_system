@@ -130,6 +130,63 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     });
   }
 
+  Future<void> _pickMultipleImages() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: true,
+    );
+
+    if (!mounted) return;
+
+    final selectedPaths =
+        picked?.files
+            .map((file) => file.path)
+            .whereType<String>()
+            .where((path) => path.trim().isNotEmpty)
+            .toList() ??
+        [];
+
+    if (selectedPaths.isEmpty) {
+      return;
+    }
+
+    final processedPaths = <String>[];
+    for (var i = 0; i < selectedPaths.length; i++) {
+      final processedPath = await _processAndStoreImage(selectedPaths[i], i);
+      if (!mounted) return;
+      if (processedPath == null) continue;
+      processedPaths.add(processedPath);
+    }
+
+    if (processedPaths.isEmpty || !mounted) {
+      return;
+    }
+
+    setState(() {
+      for (final imagePath in processedPaths) {
+        final emptyIndex = _firstCompletelyEmptyRowIndex();
+        if (emptyIndex != null) {
+          _imagePaths[emptyIndex] = imagePath;
+          continue;
+        }
+
+        _nameControllers.add(TextEditingController());
+        _imagePaths.add(imagePath);
+      }
+    });
+  }
+
+  int? _firstCompletelyEmptyRowIndex() {
+    for (var i = 0; i < _nameControllers.length; i++) {
+      final name = _nameControllers[i].text.trim();
+      final imagePath = _imagePaths[i];
+      if (name.isEmpty && (imagePath == null || imagePath.isEmpty)) {
+        return i;
+      }
+    }
+    return null;
+  }
+
   Future<String?> _processAndStoreImage(String sourcePath, int index) async {
     try {
       final sourceBytes = await File(sourcePath).readAsBytes();
@@ -420,10 +477,23 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                                 ),
                               Align(
                                 alignment: Alignment.centerLeft,
-                                child: OutlinedButton.icon(
-                                  onPressed: _addNameField,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Add Another Product'),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: _addNameField,
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Add Another Product'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: _pickMultipleImages,
+                                      icon: const Icon(
+                                        Icons.photo_library_outlined,
+                                      ),
+                                      label: const Text('Select Multiple'),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

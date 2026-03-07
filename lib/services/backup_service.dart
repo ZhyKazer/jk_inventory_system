@@ -187,9 +187,6 @@ class BackupService {
       }
 
       final encodedArchive = ZipEncoder().encode(archive);
-      if (encodedArchive == null) {
-        throw BackupException('Failed to encode backup archive.');
-      }
 
       final temporaryFile = File(temporaryPath);
       await temporaryFile.writeAsBytes(encodedArchive, flush: true);

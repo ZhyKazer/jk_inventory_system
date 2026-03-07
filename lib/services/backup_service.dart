@@ -45,11 +45,19 @@ class BackupCreateResult {
     required this.filePath,
     required this.fileName,
     required this.deletedFiles,
+    required this.productCount,
+    required this.imageCount,
+    required this.fileSizeBytes,
+    required this.createdAt,
   });
 
   final String filePath;
   final String fileName;
   final List<String> deletedFiles;
+  final int productCount;
+  final int imageCount;
+  final int fileSizeBytes;
+  final DateTime createdAt;
 }
 
 class BackupService {
@@ -97,14 +105,23 @@ class BackupService {
 
   Future<BackupCreateResult> createBackup({
     void Function(String statusMessage)? onProgress,
+    bool validateAfterSave = true,
+    bool Function()? shouldContinueValidation,
   }) async {
     final backupDirectory = await _resolveBackupDirectory();
-    return _createBackupInDirectory(backupDirectory, onProgress: onProgress);
+    return _createBackupInDirectory(
+      backupDirectory,
+      onProgress: onProgress,
+      validateAfterSave: validateAfterSave,
+      shouldContinueValidation: shouldContinueValidation,
+    );
   }
 
   Future<BackupCreateResult> _createBackupInDirectory(
     String backupDirectory, {
     void Function(String statusMessage)? onProgress,
+    required bool validateAfterSave,
+    bool Function()? shouldContinueValidation,
   }) async {
     await _ensureDirectoryWritable(backupDirectory);
 
@@ -139,29 +156,66 @@ class BackupService {
 
     List<String> deletedFiles;
     try {
-      final encoder = ZipFileEncoder();
-      encoder.create(temporaryPath);
-      encoder.addArchiveFile(ArchiveFile.string('backup.json', jsonContent));
+      final archive = Archive();
+      archive.addFile(ArchiveFile.string('backup.json', jsonContent));
+
       for (final imageEntry in imagesToBackup) {
         final imageFile = File(imageEntry.sourcePath);
         if (!await imageFile.exists()) {
           continue;
         }
+
         onProgress?.call('saving ${imageEntry.productName} image...');
-        encoder.addFile(imageFile, imageEntry.archivePath);
+
+        final imageBytes = await imageFile.readAsBytes();
+        archive.addFile(ArchiveFile.bytes(imageEntry.archivePath, imageBytes));
+
+        final shouldValidateThisImage =
+            validateAfterSave && (shouldContinueValidation?.call() ?? true);
+        if (shouldValidateThisImage) {
+          onProgress?.call(
+            'validating ${imageEntry.productName} image is saved',
+          );
+          final archivedImage = archive.findFile(imageEntry.archivePath);
+          if (archivedImage == null ||
+              archivedImage.size != imageBytes.length) {
+            throw BackupException(
+              'Backup validation failed for ${imageEntry.productName} image.',
+            );
+          }
+        }
       }
-      encoder.close();
+
+      final encodedArchive = ZipEncoder().encode(archive);
+      if (encodedArchive == null) {
+        throw BackupException('Failed to encode backup archive.');
+      }
+
+      final temporaryFile = File(temporaryPath);
+      await temporaryFile.writeAsBytes(encodedArchive, flush: true);
 
       final targetFile = File(filePath);
       if (await targetFile.exists()) {
         await targetFile.delete();
       }
 
-      final temporaryFile = File(temporaryPath);
       await temporaryFile.rename(filePath);
 
       deletedFiles = await _applyRetentionPolicy(directory.path);
+    } on BackupException catch (error) {
+      await _deleteFileIfExists(temporaryPath);
+      await _deleteFileIfExists(filePath);
+
+      if (error.message.startsWith('Backup validation failed')) {
+        throw BackupException(
+          'Backup validation failed. Broken backup was deleted. Please retry backup.',
+        );
+      }
+
+      rethrow;
     } on FileSystemException {
+      await _deleteFileIfExists(temporaryPath);
+      await _deleteFileIfExists(filePath);
       throw BackupException('Cannot write backup to the selected folder.');
     }
 
@@ -169,6 +223,10 @@ class BackupService {
       filePath: filePath,
       fileName: fileName,
       deletedFiles: deletedFiles,
+      productCount: Hive.box<Product>(InventoryStorage.productsBoxName).length,
+      imageCount: imagesToBackup.length,
+      fileSizeBytes: File(filePath).lengthSync(),
+      createdAt: now,
     );
   }
 
@@ -191,6 +249,17 @@ class BackupService {
     }
 
     return backups.take(limit).toList();
+  }
+
+  Future<void> _deleteFileIfExists(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      return;
+    }
+
+    try {
+      await file.delete();
+    } on FileSystemException {}
   }
 
   Future<void> restoreFromQuickBackup(String filePath) async {

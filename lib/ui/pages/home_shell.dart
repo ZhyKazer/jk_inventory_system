@@ -256,6 +256,8 @@ class _HomeShellState extends State<HomeShell> {
     Future<void> Function() action, {
     required String message,
     ValueListenable<String>? messageListenable,
+    String? secondaryActionLabel,
+    VoidCallback? onSecondaryAction,
   }) async {
     showDialog<void>(
       context: context,
@@ -281,6 +283,14 @@ class _HomeShellState extends State<HomeShell> {
               ),
             ],
           ),
+          actions: secondaryActionLabel != null && onSecondaryAction != null
+              ? [
+                  TextButton(
+                    onPressed: onSecondaryAction,
+                    child: Text(secondaryActionLabel),
+                  ),
+                ]
+              : null,
         ),
       ),
     );
@@ -333,13 +343,56 @@ class _HomeShellState extends State<HomeShell> {
     return confirmed == true;
   }
 
+  Future<void> _showBackupConfirmation(
+    BackupCreateResult result,
+    String retentionMessage,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Backup Created'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('File: ${result.fileName}'),
+            Text('Size: ${_formatFileSize(result.fileSizeBytes)}'),
+            Text('Products: ${result.productCount}'),
+            Text('Images: ${result.imageCount}'),
+            Text(
+              'Created: ${DateFormat('dd/MM/yyyy HH:mm:ss').format(result.createdAt)}',
+            ),
+            if (retentionMessage.isNotEmpty) Text(retentionMessage),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+  }
+
   Future<void> _onBackupData() async {
     final progressMessage = ValueNotifier<String>('saving json information');
+    final cancelValidation = ValueNotifier<bool>(false);
     try {
       late BackupCreateResult result;
       await _showLoadingWhile(
         () async {
           result = await _backupService.createBackup(
+            validateAfterSave: true,
+            shouldContinueValidation: () => !cancelValidation.value,
             onProgress: (statusMessage) {
               if (!mounted) return;
               progressMessage.value = statusMessage;
@@ -348,13 +401,18 @@ class _HomeShellState extends State<HomeShell> {
         },
         message: 'Creating backup...',
         messageListenable: progressMessage,
+        secondaryActionLabel: 'Cancel validation',
+        onSecondaryAction: () {
+          cancelValidation.value = true;
+        },
       );
 
       final removed = result.deletedFiles.length;
       final retentionMessage = removed > 0
           ? ' Removed $removed old backup(s).'
           : '';
-      _showMessage('Backup created: ${result.fileName}.$retentionMessage');
+      await _showBackupConfirmation(result, retentionMessage);
+    } on BackupException catch (error) {
     } on BackupException catch (error) {
       if (error.message == 'Cannot write backup to the selected folder.') {
         _showMessage(
@@ -367,6 +425,7 @@ class _HomeShellState extends State<HomeShell> {
       _showMessage('Failed to create backup. Please try again.');
     } finally {
       progressMessage.dispose();
+      cancelValidation.dispose();
     }
   }
 

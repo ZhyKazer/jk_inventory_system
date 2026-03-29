@@ -82,7 +82,7 @@ class CategoriesPage extends StatelessWidget {
                 ),
                 title: Text(category.name),
                 subtitle: Text(
-                  'Require Product Image: ${category.requireProductImage ? 'On' : 'Off'}',
+                  'Require Product Image: ${category.requireProductImage ? 'On' : 'Off'} • Flexible Selling Price: ${category.allowFlexibleSellingPrice ? 'On' : 'Off'}',
                 ),
                 trailing: Wrap(
                   spacing: 4,

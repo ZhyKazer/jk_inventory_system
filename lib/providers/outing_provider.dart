@@ -96,12 +96,21 @@ class OutingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startDraft() {
+  void startDraft({bool notify = true}) {
+    final hadDraftData =
+        _displayedDraft.isNotEmpty ||
+        _returnedDraft.isNotEmpty ||
+        _discardedDraft.isNotEmpty ||
+        _replacedDraft.isNotEmpty;
+
     _displayedDraft = [];
     _returnedDraft = [];
     _discardedDraft = [];
     _replacedDraft = [];
-    notifyListeners();
+
+    if (notify && hadDraftData) {
+      notifyListeners();
+    }
   }
 
   double _sumLines(
@@ -312,10 +321,50 @@ class OutingProvider extends ChangeNotifier {
   Map<String, double> _sumByProduct(List<OutingLine> lines) {
     final totals = <String, double>{};
     for (final line in lines) {
-      totals.update(line.productId, (value) => value + line.value,
-          ifAbsent: () => line.value);
+      totals.update(
+        line.productId,
+        (value) => value + line.value,
+        ifAbsent: () => line.value,
+      );
     }
     return totals;
+  }
+
+  double _soldRevenueForProduct({
+    required String productId,
+    required double returned,
+    required double defaultSellingPrice,
+  }) {
+    var remainingReturned = returned;
+    var revenue = 0.0;
+
+    for (final line in _displayedDraft) {
+      if (line.productId != productId) {
+        continue;
+      }
+
+      final displayedValue = line.value;
+      if (displayedValue <= 0) {
+        continue;
+      }
+
+      final returnedFromLine = remainingReturned <= 0
+          ? 0.0
+          : (remainingReturned >= displayedValue
+                ? displayedValue
+                : remainingReturned);
+      remainingReturned -= returnedFromLine;
+
+      final soldFromLine = displayedValue - returnedFromLine;
+      if (soldFromLine <= 0) {
+        continue;
+      }
+
+      final sellingPrice = line.sellingPriceOverride ?? defaultSellingPrice;
+      revenue += soldFromLine * sellingPrice;
+    }
+
+    return revenue;
   }
 
   OutingCalculationSummary calculateDraftSummary() {
@@ -355,10 +404,15 @@ class OutingProvider extends ChangeNotifier {
 
       final capital = product?.costPrice ?? 0.0;
       final selling = product?.sellingPrice ?? 0.0;
-      final revenue = safeSold * selling;
+      final revenue = _soldRevenueForProduct(
+        productId: productId,
+        returned: returned,
+        defaultSellingPrice: selling,
+      );
       final capitalCost = safeSold * capital;
       final approxProfit = revenue - capitalCost;
       final lost = discarded * capital;
+      final effectiveSelling = safeSold > 0 ? revenue / safeSold : selling;
 
       totalDisplayed += displayed;
       totalReturned += returned;
@@ -378,7 +432,7 @@ class OutingProvider extends ChangeNotifier {
             returned: returned,
             sold: safeSold,
             currentCapital: capital,
-            currentSelling: selling,
+            currentSelling: effectiveSelling,
             revenue: revenue,
             capitalCost: capitalCost,
             approxProfit: approxProfit,

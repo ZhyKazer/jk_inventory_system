@@ -72,7 +72,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
   @override
   void initState() {
     super.initState();
-    widget.outingProvider.startDraft();
+    widget.outingProvider.startDraft(notify: false);
   }
 
   @override
@@ -99,7 +99,8 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
   Future<void> _exportReceiptPng() async {
     try {
       final boundary =
-          _receiptBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+          _receiptBoundaryKey.currentContext?.findRenderObject()
+              as RenderRepaintBoundary?;
       if (boundary == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Receipt preview is not ready yet.')),
@@ -124,9 +125,9 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
       await file.writeAsBytes(pngBytes, flush: true);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Receipt exported: ${file.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Receipt exported: ${file.path}')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -152,6 +153,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     required String productId,
     required UnitType unitType,
     required double value,
+    double? sellingPriceOverride,
   }) {
     if (value <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -162,7 +164,14 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
 
     final error = widget.outingProvider.addLine(
       step,
-      OutingLine(productId: productId, unitType: unitType, value: value),
+      OutingLine(
+        productId: productId,
+        unitType: unitType,
+        value: value,
+        sellingPriceOverride: step == OutingStepType.displayed
+            ? sellingPriceOverride
+            : null,
+      ),
     );
 
     if (error != null) {
@@ -207,6 +216,19 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
     return color_utils.colorFromHex(category.colorHex);
   }
 
+  bool _isFlexibleSellingEnabled(Product product) {
+    final category = _categoryForProduct(product);
+    return category?.allowFlexibleSellingPrice ?? false;
+  }
+
+  double _sellingPriceOfProduct(String productId) {
+    for (final product in widget.productProvider.items) {
+      if (product.id == productId) {
+        return product.sellingPrice;
+      }
+    }
+    return 0.0;
+  }
 
   bool _canDisplayProduct(Product product, UnitType unitType) {
     return widget.outingProvider.batchStockFor(product.id, unitType) > 0 &&
@@ -439,12 +461,16 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
           productName: _productName,
           productDropdownLabel: _productDropdownLabel,
           productCategoryColor: _productCategoryColor,
+          enableSellingPriceInput: true,
+          canEditSellingPrice: _isFlexibleSellingEnabled,
+          defaultSellingPrice: _sellingPriceOfProduct,
           onUnitChanged: (value) => setState(() => _displayedUnit = value),
-          onAdd: (productId, value) => _addLine(
+          onAdd: (productId, value, sellingPriceOverride) => _addLine(
             step: OutingStepType.displayed,
             productId: productId,
             unitType: _displayedUnit,
             value: value,
+            sellingPriceOverride: sellingPriceOverride,
           ),
           onRemoveLine: (index) =>
               widget.outingProvider.removeLine(OutingStepType.displayed, index),
@@ -474,7 +500,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
               productDropdownLabel: _productDropdownLabel,
               productCategoryColor: _productCategoryColor,
               onUnitChanged: (value) => setState(() => _returnedUnit = value),
-              onAdd: (productId, value) => _addLine(
+              onAdd: (productId, value, _) => _addLine(
                 step: OutingStepType.returned,
                 productId: productId,
                 unitType: _returnedUnit,
@@ -500,7 +526,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
           productDropdownLabel: _productDropdownLabel,
           productCategoryColor: _productCategoryColor,
           onUnitChanged: (value) => setState(() => _discardedUnit = value),
-          onAdd: (productId, value) => _addLine(
+          onAdd: (productId, value, _) => _addLine(
             step: OutingStepType.discarded,
             productId: productId,
             unitType: _discardedUnit,
@@ -533,7 +559,7 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
               productDropdownLabel: _productDropdownLabel,
               productCategoryColor: _productCategoryColor,
               onUnitChanged: (value) => setState(() => _replacedUnit = value),
-              onAdd: (productId, value) => _addLine(
+              onAdd: (productId, value, _) => _addLine(
                 step: OutingStepType.replaced,
                 productId: productId,
                 unitType: _replacedUnit,
@@ -689,6 +715,9 @@ class _StepLineEntry extends StatefulWidget {
     required this.onRemoveLine,
     required this.helperText,
     this.emptyProductsMessage,
+    this.enableSellingPriceInput = false,
+    this.canEditSellingPrice,
+    this.defaultSellingPrice,
   });
 
   final List<Product> products;
@@ -698,10 +727,18 @@ class _StepLineEntry extends StatefulWidget {
   final String Function(Product) productDropdownLabel;
   final Color Function(Product) productCategoryColor;
   final ValueChanged<UnitType> onUnitChanged;
-  final bool Function(String productId, double value) onAdd;
+  final bool? Function(
+    String productId,
+    double value,
+    double? sellingPriceOverride,
+  )
+  onAdd;
   final ValueChanged<int> onRemoveLine;
   final String helperText;
   final String? emptyProductsMessage;
+  final bool enableSellingPriceInput;
+  final bool Function(Product product)? canEditSellingPrice;
+  final double Function(String productId)? defaultSellingPrice;
 
   @override
   State<_StepLineEntry> createState() => _StepLineEntryState();
@@ -709,6 +746,7 @@ class _StepLineEntry extends StatefulWidget {
 
 class _StepLineEntryState extends State<_StepLineEntry> {
   final TextEditingController _valueController = TextEditingController();
+  final TextEditingController _sellingPriceController = TextEditingController();
   String? _selectedProductId;
 
   @override
@@ -721,6 +759,11 @@ class _StepLineEntryState extends State<_StepLineEntry> {
   void didUpdateWidget(covariant _StepLineEntry oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncSelectedProduct();
+    if (_selectedProductId != null &&
+        widget.enableSellingPriceInput &&
+        oldWidget.defaultSellingPrice != widget.defaultSellingPrice) {
+      _syncSellingPriceInput();
+    }
   }
 
   void _syncSelectedProduct() {
@@ -731,11 +774,42 @@ class _StepLineEntryState extends State<_StepLineEntry> {
       _selectedProductId = widget.products.isNotEmpty
           ? widget.products.first.id
           : null;
+      _syncSellingPriceInput();
     }
+  }
+
+  Product? _selectedProduct() {
+    final productId = _selectedProductId;
+    if (productId == null) return null;
+    for (final product in widget.products) {
+      if (product.id == productId) {
+        return product;
+      }
+    }
+    return null;
+  }
+
+  void _syncSellingPriceInput() {
+    final productId = _selectedProductId;
+    if (!widget.enableSellingPriceInput || productId == null) {
+      _sellingPriceController.clear();
+      return;
+    }
+
+    final defaultSelling = widget.defaultSellingPrice?.call(productId) ?? 0.0;
+    _sellingPriceController.text = defaultSelling.toStringAsFixed(2);
+    _sellingPriceController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _sellingPriceController.text.length),
+    );
   }
 
   double _parseValue() {
     final text = _valueController.text.trim();
+    return double.tryParse(text) ?? 0;
+  }
+
+  double _parseSellingPrice() {
+    final text = _sellingPriceController.text.trim();
     return double.tryParse(text) ?? 0;
   }
 
@@ -754,7 +828,27 @@ class _StepLineEntryState extends State<_StepLineEntry> {
     if (productId == null) return;
 
     final value = _parseValue();
-    final added = widget.onAdd(productId, value);
+    final selectedProduct = _selectedProduct();
+
+    double? sellingPriceOverride;
+    if (widget.enableSellingPriceInput && selectedProduct != null) {
+      final canEdit =
+          widget.canEditSellingPrice?.call(selectedProduct) ?? false;
+      if (canEdit) {
+        final sellingPrice = _parseSellingPrice();
+        if (sellingPrice <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Selling price must be greater than 0.'),
+            ),
+          );
+          return;
+        }
+        sellingPriceOverride = sellingPrice;
+      }
+    }
+
+    final added = widget.onAdd(productId, value, sellingPriceOverride) ?? false;
     if (added) {
       _valueController.clear();
     }
@@ -763,6 +857,7 @@ class _StepLineEntryState extends State<_StepLineEntry> {
   @override
   void dispose() {
     _valueController.dispose();
+    _sellingPriceController.dispose();
     super.dispose();
   }
 
@@ -833,7 +928,9 @@ class _StepLineEntryState extends State<_StepLineEntry> {
                                   ),
                                 ),
                               ),
-                              TextSpan(text: widget.productDropdownLabel(product)),
+                              TextSpan(
+                                text: widget.productDropdownLabel(product),
+                              ),
                             ],
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -843,9 +940,59 @@ class _StepLineEntryState extends State<_StepLineEntry> {
                   onChanged: (value) {
                     setState(() {
                       _selectedProductId = value;
+                      _syncSellingPriceInput();
                     });
                   },
                 ),
+                if (widget.enableSellingPriceInput) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (context) {
+                      final selectedProduct = _selectedProduct();
+                      final canEdit =
+                          selectedProduct != null &&
+                          (widget.canEditSellingPrice?.call(selectedProduct) ??
+                              false);
+
+                      if (selectedProduct == null) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final defaultSelling =
+                          widget.defaultSellingPrice?.call(
+                            selectedProduct.id,
+                          ) ??
+                          0.0;
+
+                      if (!canEdit) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'Selling price is fixed for this category: ${defaultSelling.toStringAsFixed(2)}',
+                          ),
+                        );
+                      }
+
+                      return TextField(
+                        controller: _sellingPriceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Selling Price (Override)',
+                          border: OutlineInputBorder(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -907,7 +1054,11 @@ class _StepLineEntryState extends State<_StepLineEntry> {
               ),
               child: ListTile(
                 title: Text(widget.productName(widget.lines[index].productId)),
-                subtitle: Text(widget.lines[index].unitType.label),
+                subtitle: Text(
+                  widget.lines[index].sellingPriceOverride == null
+                      ? widget.lines[index].unitType.label
+                      : '${widget.lines[index].unitType.label} • Selling ${widget.lines[index].sellingPriceOverride!.toStringAsFixed(2)}',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1008,7 +1159,9 @@ class _ReviewSection extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '• ${productName(line.productId)} (${line.unitType.label}): ${line.value.toStringAsFixed(2)}',
+                line.sellingPriceOverride == null
+                    ? '• ${productName(line.productId)} (${line.unitType.label}): ${line.value.toStringAsFixed(2)}'
+                    : '• ${productName(line.productId)} (${line.unitType.label}): ${line.value.toStringAsFixed(2)} @ ${line.sellingPriceOverride!.toStringAsFixed(2)}',
               ),
             ),
         ],
@@ -1036,17 +1189,21 @@ class _ReviewSection extends StatelessWidget {
             children: [
               Text(
                 'Outing Receipt Preview',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 6),
-              Text('Date: ${DateFormat('MMM d, yyyy • h:mm a').format(DateTime.now())}'),
+              Text(
+                'Date: ${DateFormat('MMM d, yyyy • h:mm a').format(DateTime.now())}',
+              ),
               const SizedBox(height: 8),
               Text('Displayed: ${summary.totalDisplayed.toStringAsFixed(2)}'),
               Text('Returned: ${summary.totalReturned.toStringAsFixed(2)}'),
               Text('Sold: ${summary.totalSold.toStringAsFixed(2)}'),
-              Text('Capital (COGS): ${summary.totalCapital.toStringAsFixed(2)}'),
+              Text(
+                'Capital (COGS): ${summary.totalCapital.toStringAsFixed(2)}',
+              ),
               Text('Revenue: ${summary.totalRevenue.toStringAsFixed(2)}'),
               Text(
                 'Approximate Profit: ${summary.approximateProfit.toStringAsFixed(2)}',
@@ -1054,7 +1211,7 @@ class _ReviewSection extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Formula: (Sold × current selling price) - (Sold × current capital)',
+                'Formula: Revenue(sold lines) - (Sold × current capital). For flexible-price categories, revenue uses the selling price entered in Displayed step.',
               ),
             ],
           ),

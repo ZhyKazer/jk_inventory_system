@@ -863,6 +863,7 @@ class BackupService {
     'name': item.name,
     'colorHex': item.colorHex,
     'requireProductImage': item.requireProductImage,
+    'allowFlexibleSellingPrice': item.allowFlexibleSellingPrice,
     'createdAt': item.createdAt.toUtc().toIso8601String(),
     'updatedAt': item.updatedAt.toUtc().toIso8601String(),
   };
@@ -873,6 +874,7 @@ class BackupService {
       name: _requireString(json, 'name'),
       colorHex: _requireString(json, 'colorHex'),
       requireProductImage: _readCategoryRequireProductImage(json),
+      allowFlexibleSellingPrice: _readCategoryAllowFlexibleSellingPrice(json),
       createdAt: _parseDateTime(_requireString(json, 'createdAt')),
       updatedAt: _parseDateTime(_requireString(json, 'updatedAt')),
     );
@@ -890,6 +892,14 @@ class BackupService {
       return false;
     }
 
+    return false;
+  }
+
+  bool _readCategoryAllowFlexibleSellingPrice(Map<String, dynamic> json) {
+    final allowFlexibleSellingPrice = json['allowFlexibleSellingPrice'];
+    if (allowFlexibleSellingPrice is bool) {
+      return allowFlexibleSellingPrice;
+    }
     return false;
   }
 

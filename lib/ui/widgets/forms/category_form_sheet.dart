@@ -33,6 +33,7 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
   late final TextEditingController _nameController;
   late Color _selectedColor;
   late bool _requireProductImage;
+  late bool _allowFlexibleSellingPrice;
   bool _isSaving = false;
 
   @override
@@ -43,6 +44,8 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
         ? color_utils.colorFromHex(widget.editing!.colorHex)
         : Color(0xFF000000 | Random().nextInt(0xFFFFFF));
     _requireProductImage = widget.editing?.requireProductImage ?? false;
+    _allowFlexibleSellingPrice =
+        widget.editing?.allowFlexibleSellingPrice ?? false;
   }
 
   @override
@@ -63,12 +66,14 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
             name: name,
             colorHex: colorHex,
             requireProductImage: _requireProductImage,
+            allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
           )
         : await widget.provider.update(
             id: widget.editing!.id,
             name: name,
             colorHex: colorHex,
             requireProductImage: _requireProductImage,
+            allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
           );
 
     if (!mounted) return;
@@ -114,6 +119,14 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
               value: _requireProductImage,
               onChanged: (value) =>
                   setState(() => _requireProductImage = value),
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Allow Flexible Selling Price'),
+              subtitle: Text(_allowFlexibleSellingPrice ? 'On' : 'Off'),
+              value: _allowFlexibleSellingPrice,
+              onChanged: (value) =>
+                  setState(() => _allowFlexibleSellingPrice = value),
             ),
             const SizedBox(height: 16),
             TextFormField(

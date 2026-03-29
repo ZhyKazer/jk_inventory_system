@@ -1,21 +1,20 @@
 import 'package:hive/hive.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 
-enum OutingStatus {
-  draft,
-  submitted,
-}
+enum OutingStatus { draft, submitted }
 
 class OutingLine {
   OutingLine({
     required this.productId,
     required this.unitType,
     required this.value,
+    this.sellingPriceOverride,
   });
 
   final String productId;
   final UnitType unitType;
   final double value;
+  final double? sellingPriceOverride;
 }
 
 class OutingRecord {
@@ -162,7 +161,9 @@ class OutingRecordAdapter extends TypeAdapter<OutingRecord> {
     if (obj.totalCapital != null) writer.writeDouble(obj.totalCapital!);
 
     writer.writeBool(obj.approximateProfit != null);
-    if (obj.approximateProfit != null) writer.writeDouble(obj.approximateProfit!);
+    if (obj.approximateProfit != null) {
+      writer.writeDouble(obj.approximateProfit!);
+    }
   }
 
   List<OutingLine> _readLines(BinaryReader reader) {

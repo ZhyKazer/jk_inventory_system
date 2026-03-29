@@ -41,6 +41,7 @@ class CategoryProvider extends ChangeNotifier {
     required String name,
     required String colorHex,
     required bool requireProductImage,
+    required bool allowFlexibleSellingPrice,
   }) async {
     final error = validateName(name);
     if (error != null) return error;
@@ -51,6 +52,7 @@ class CategoryProvider extends ChangeNotifier {
       name: name.trim(),
       colorHex: colorHex,
       requireProductImage: requireProductImage,
+      allowFlexibleSellingPrice: allowFlexibleSellingPrice,
       createdAt: now,
       updatedAt: now,
     );
@@ -71,6 +73,7 @@ class CategoryProvider extends ChangeNotifier {
     required String name,
     required String colorHex,
     required bool requireProductImage,
+    required bool allowFlexibleSellingPrice,
   }) async {
     final error = validateName(name, editingId: id);
     if (error != null) return error;
@@ -80,6 +83,7 @@ class CategoryProvider extends ChangeNotifier {
       name: name.trim(),
       colorHex: colorHex,
       requireProductImage: requireProductImage,
+      allowFlexibleSellingPrice: allowFlexibleSellingPrice,
       updatedAt: DateTime.now(),
     );
     await _repository.update(updated);

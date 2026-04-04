@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -50,6 +51,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
   late final TextEditingController _nameController;
   late final List<TextEditingController> _nameControllers;
   late final List<String?> _imagePaths;
+  String? _editingImagePath;
   String _selectedCategoryId = '';
   bool _isSaving = false;
 
@@ -70,6 +72,7 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     _nameController = TextEditingController(text: widget.editing?.name ?? '');
     _nameControllers = [TextEditingController()];
     _imagePaths = [null];
+    _editingImagePath = widget.editing?.imagePath;
     _selectedCategoryId =
         widget.editing?.categoryId ??
         (widget.categories.isNotEmpty ? widget.categories.first.id : '');
@@ -121,12 +124,20 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     final selectedPath = picked?.files.single.path;
     if (selectedPath == null || selectedPath.trim().isEmpty) return;
 
-    final processedPath = await _processAndStoreImage(selectedPath, index);
+    final processedPath = await AppLoading.run<String?>(
+      context,
+      action: () => _processAndStoreImage(selectedPath, index),
+      message: 'Processing image...',
+    );
     if (!mounted) return;
     if (processedPath == null) return;
 
     setState(() {
-      _imagePaths[index] = processedPath;
+      if (_isCreateMode) {
+        _imagePaths[index] = processedPath;
+      } else {
+        _editingImagePath = processedPath;
+      }
     });
   }
 
@@ -150,13 +161,35 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
       return;
     }
 
+    final progressMessage = ValueNotifier<String>(
+      'Processing image 1 of ${selectedPaths.length}...',
+    );
     final processedPaths = <String>[];
-    for (var i = 0; i < selectedPaths.length; i++) {
-      final processedPath = await _processAndStoreImage(selectedPaths[i], i);
-      if (!mounted) return;
-      if (processedPath == null) continue;
-      processedPaths.add(processedPath);
+
+    try {
+      await AppLoading.run<void>(
+        context,
+        action: () async {
+          for (var i = 0; i < selectedPaths.length; i++) {
+            progressMessage.value =
+                'Processing image ${i + 1} of ${selectedPaths.length}...';
+
+            final processedPath = await _processAndStoreImage(
+              selectedPaths[i],
+              i,
+            );
+            if (processedPath == null) continue;
+            processedPaths.add(processedPath);
+          }
+        },
+        message: 'Processing images...',
+        messageListenable: progressMessage,
+      );
+    } finally {
+      progressMessage.dispose();
     }
+
+    if (!mounted) return;
 
     if (processedPaths.isEmpty || !mounted) {
       return;
@@ -277,17 +310,25 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final error = _isCreateMode
-        ? await widget.provider.createMany(
-            drafts: _bulkDrafts(),
-            categoryId: _selectedCategoryId,
-            requireProductImage: _selectedCategoryRequiresImage,
-          )
-        : await widget.provider.update(
-            id: widget.editing!.id,
-            name: _nameController.text,
-            categoryId: _selectedCategoryId,
-          );
+    final error = await AppLoading.run<String?>(
+      context,
+      action: () {
+        return _isCreateMode
+            ? widget.provider.createMany(
+                drafts: _bulkDrafts(),
+                categoryId: _selectedCategoryId,
+                requireProductImage: _selectedCategoryRequiresImage,
+              )
+            : widget.provider.update(
+                id: widget.editing!.id,
+                name: _nameController.text,
+                categoryId: _selectedCategoryId,
+                imagePath: _editingImagePath,
+                requireProductImage: _selectedCategoryRequiresImage,
+              );
+      },
+      message: _isCreateMode ? 'Saving products...' : 'Saving product...',
+    );
 
     if (!mounted) return;
 
@@ -331,28 +372,30 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedCategoryId.isEmpty
-                      ? null
-                      : _selectedCategoryId,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
+                if (_isCreateMode) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedCategoryId.isEmpty
+                        ? null
+                        : _selectedCategoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: widget.categories
+                        .map(
+                          (category) => DropdownMenuItem<String>(
+                            value: category.id,
+                            child: Text(category.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedCategoryId = value ?? ''),
+                    validator: (value) =>
+                        widget.provider.validateCategory(value ?? ''),
                   ),
-                  items: widget.categories
-                      .map(
-                        (category) => DropdownMenuItem<String>(
-                          value: category.id,
-                          child: Text(category.name),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedCategoryId = value ?? ''),
-                  validator: (value) =>
-                      widget.provider.validateCategory(value ?? ''),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
                 Expanded(
                   child: SingleChildScrollView(
                     child: _isCreateMode
@@ -498,16 +541,115 @@ class _ProductFormSheetState extends State<_ProductFormSheet> {
                               ),
                             ],
                           )
-                        : TextFormField(
-                            controller: _nameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Product Name',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) => widget.provider.validateName(
-                              value ?? '',
-                              editingId: widget.editing?.id,
-                            ),
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Align(
+                                alignment: Alignment.center,
+                                child: Column(
+                                  children: [
+                                    OutlinedButton(
+                                      onPressed: () => _pickImage(0),
+                                      onLongPress:
+                                          _editingImagePath != null &&
+                                              _editingImagePath!.isNotEmpty
+                                          ? () => _showLargePreview(
+                                                _editingImagePath!,
+                                              )
+                                          : null,
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(120, 120),
+                                        padding: const EdgeInsets.all(8),
+                                      ),
+                                      child: _editingImagePath == null ||
+                                              _editingImagePath!.isEmpty
+                                          ? const Icon(
+                                              Icons.add_a_photo_outlined,
+                                              size: 30,
+                                            )
+                                          : ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: SizedBox(
+                                                width: 104,
+                                                height: 104,
+                                                child: Image.file(
+                                                  File(_editingImagePath!),
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (_, _, _) => const Icon(
+                                                        Icons
+                                                            .broken_image_outlined,
+                                                        size: 24,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _editingImagePath == null ||
+                                              _editingImagePath!.isEmpty
+                                          ? 'Photo'
+                                          : 'Tap to change, long-press to preview',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (_editingImagePath != null &&
+                                        _editingImagePath!.isNotEmpty)
+                                      TextButton.icon(
+                                        onPressed: () {
+                                          setState(() {
+                                            _editingImagePath = null;
+                                          });
+                                        },
+                                        icon: const Icon(Icons.delete_outline),
+                                        label: const Text('Remove Photo'),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _nameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Product Name',
+                                  border: OutlineInputBorder(),
+                                ),
+                                validator: (value) => widget.provider
+                                    .validateName(
+                                      value ?? '',
+                                      editingId: widget.editing?.id,
+                                    ),
+                              ),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedCategoryId.isEmpty
+                                    ? null
+                                    : _selectedCategoryId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Category',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: widget.categories
+                                    .map(
+                                      (category) => DropdownMenuItem<String>(
+                                        value: category.id,
+                                        child: Text(category.name),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) => setState(
+                                  () => _selectedCategoryId = value ?? '',
+                                ),
+                                validator: (value) =>
+                                    widget.provider.validateCategory(
+                                      value ?? '',
+                                    ),
+                              ),
+                            ],
                           ),
                   ),
                 ),

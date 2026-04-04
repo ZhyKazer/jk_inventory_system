@@ -30,6 +30,7 @@ class ActivityLogProvider extends ChangeNotifier {
     double? sold,
     double? profit,
     double? lost,
+    String? productDetails,
   }) async {
     final item = ActivityLog(
       id: _uuid.v4(),
@@ -45,6 +46,7 @@ class ActivityLogProvider extends ChangeNotifier {
       sold: sold,
       profit: profit,
       lost: lost,
+      productDetails: productDetails,
     );
 
     await _repository.create(item);

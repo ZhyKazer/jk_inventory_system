@@ -167,18 +167,31 @@ class OutingRecordAdapter extends TypeAdapter<OutingRecord> {
   }
 
   List<OutingLine> _readLines(BinaryReader reader) {
-    final count = reader.readInt();
+    final header = reader.readInt();
+    final hasOverrideFormat = header == -1;
+    final count = hasOverrideFormat ? reader.readInt() : header;
     final lines = <OutingLine>[];
     for (var index = 0; index < count; index++) {
       final productId = reader.readString();
       final unitIndex = reader.readInt();
+      final value = reader.readDouble();
+
+      double? sellingPriceOverride;
+      if (hasOverrideFormat) {
+        final hasOverride = reader.readBool();
+        if (hasOverride) {
+          sellingPriceOverride = reader.readDouble();
+        }
+      }
+
       lines.add(
         OutingLine(
           productId: productId,
           unitType: unitIndex >= 0 && unitIndex < UnitType.values.length
               ? UnitType.values[unitIndex]
               : UnitType.quantity,
-          value: reader.readDouble(),
+          value: value,
+          sellingPriceOverride: sellingPriceOverride,
         ),
       );
     }
@@ -186,12 +199,21 @@ class OutingRecordAdapter extends TypeAdapter<OutingRecord> {
   }
 
   void _writeLines(BinaryWriter writer, List<OutingLine> lines) {
-    writer.writeInt(lines.length);
+    // Marker `-1` indicates extended line format with optional selling override.
+    writer
+      ..writeInt(-1)
+      ..writeInt(lines.length);
+
     for (final line in lines) {
       writer
         ..writeString(line.productId)
         ..writeInt(line.unitType.index)
-        ..writeDouble(line.value);
+        ..writeDouble(line.value)
+        ..writeBool(line.sellingPriceOverride != null);
+
+      if (line.sellingPriceOverride != null) {
+        writer.writeDouble(line.sellingPriceOverride!);
+      }
     }
   }
 }

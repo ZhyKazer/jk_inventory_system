@@ -1036,6 +1036,7 @@ class BackupService {
             'productId': line.productId,
             'unitType': line.unitType.name,
             'value': line.value,
+            'sellingPriceOverride': line.sellingPriceOverride,
           },
         )
         .toList();
@@ -1055,6 +1056,9 @@ class BackupService {
         productId: _requireString(entry, 'productId'),
         unitType: _unitTypeFromString(_requireString(entry, 'unitType')),
         value: _requireDouble(entry, 'value'),
+        sellingPriceOverride: _parseOptionalDouble(
+          entry['sellingPriceOverride'],
+        ),
       );
     }).toList();
   }
@@ -1073,6 +1077,7 @@ class BackupService {
     'sold': item.sold,
     'profit': item.profit,
     'lost': item.lost,
+    'productDetails': item.productDetails,
   };
 
   ActivityLog _activityLogFromJson(Map<String, dynamic> json) {
@@ -1092,6 +1097,7 @@ class BackupService {
       sold: _parseOptionalDouble(json['sold']),
       profit: _parseOptionalDouble(json['profit']),
       lost: _parseOptionalDouble(json['lost']),
+      productDetails: _requireOptionalString(json, 'productDetails'),
     );
   }
 

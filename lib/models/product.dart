@@ -1,6 +1,8 @@
 import 'package:hive/hive.dart';
 
 class Product {
+  static const Object _noImagePath = Object();
+
   Product({
     required this.id,
     required this.categoryId,
@@ -25,7 +27,7 @@ class Product {
     String? id,
     String? categoryId,
     String? name,
-    String? imagePath,
+    Object? imagePath = _noImagePath,
     double? costPrice,
     double? sellingPrice,
     DateTime? createdAt,
@@ -35,7 +37,9 @@ class Product {
       id: id ?? this.id,
       categoryId: categoryId ?? this.categoryId,
       name: name ?? this.name,
-      imagePath: imagePath ?? this.imagePath,
+        imagePath: identical(imagePath, _noImagePath)
+          ? this.imagePath
+          : imagePath as String?,
       costPrice: costPrice ?? this.costPrice,
       sellingPrice: sellingPrice ?? this.sellingPrice,
       createdAt: createdAt ?? this.createdAt,

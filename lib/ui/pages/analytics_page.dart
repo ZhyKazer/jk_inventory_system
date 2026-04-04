@@ -898,6 +898,126 @@ class _ProductGrossStat {
   final double capital;
 }
 
+class _RecordProductMetrics {
+  _RecordProductMetrics({
+    required this.sold,
+    required this.gross,
+    required this.capital,
+  });
+
+  final double sold;
+  final double gross;
+  final double capital;
+}
+
+Map<String, _RecordProductMetrics> _recordMetricsByProduct({
+  required OutingRecord record,
+  required Map<String, Product> productMap,
+}) {
+  final returnedByProduct = <String, double>{};
+  final replacedByProduct = <String, double>{};
+
+  for (final line in record.returnedProducts) {
+    returnedByProduct.update(
+      line.productId,
+      (value) => value + line.value,
+      ifAbsent: () => line.value,
+    );
+  }
+
+  for (final line in record.replacedDiscardedProducts) {
+    replacedByProduct.update(
+      line.productId,
+      (value) => value + line.value,
+      ifAbsent: () => line.value,
+    );
+  }
+
+  final soldByProduct = <String, double>{};
+  final grossByProduct = <String, double>{};
+  final capitalByProduct = <String, double>{};
+
+  for (final line in record.displayedProducts) {
+    final productId = line.productId;
+    final product = productMap[productId];
+    final defaultSelling = product?.sellingPrice ?? 0.0;
+    final costPrice = product?.costPrice ?? 0.0;
+
+    final remainingReturned = returnedByProduct[productId] ?? 0.0;
+    final returnedFromLine = remainingReturned <= 0
+        ? 0.0
+        : (remainingReturned >= line.value ? line.value : remainingReturned);
+    returnedByProduct[productId] = remainingReturned - returnedFromLine;
+
+    final soldFromLine = line.value - returnedFromLine;
+    if (soldFromLine <= 0) {
+      continue;
+    }
+
+    final appliedSellingPrice = line.sellingPriceOverride ?? defaultSelling;
+
+    soldByProduct.update(
+      productId,
+      (value) => value + soldFromLine,
+      ifAbsent: () => soldFromLine,
+    );
+    grossByProduct.update(
+      productId,
+      (value) => value + (soldFromLine * appliedSellingPrice),
+      ifAbsent: () => soldFromLine * appliedSellingPrice,
+    );
+    capitalByProduct.update(
+      productId,
+      (value) => value + (soldFromLine * costPrice),
+      ifAbsent: () => soldFromLine * costPrice,
+    );
+  }
+
+  // Preserve existing analytics behavior where replaced contributes to sold/gross.
+  for (final entry in replacedByProduct.entries) {
+    final productId = entry.key;
+    final replacedQty = entry.value;
+    if (replacedQty <= 0) {
+      continue;
+    }
+
+    final product = productMap[productId];
+    final defaultSelling = product?.sellingPrice ?? 0.0;
+    final costPrice = product?.costPrice ?? 0.0;
+
+    soldByProduct.update(
+      productId,
+      (value) => value + replacedQty,
+      ifAbsent: () => replacedQty,
+    );
+    grossByProduct.update(
+      productId,
+      (value) => value + (replacedQty * defaultSelling),
+      ifAbsent: () => replacedQty * defaultSelling,
+    );
+    capitalByProduct.update(
+      productId,
+      (value) => value + (replacedQty * costPrice),
+      ifAbsent: () => replacedQty * costPrice,
+    );
+  }
+
+  final productIds = <String>{
+    ...soldByProduct.keys,
+    ...grossByProduct.keys,
+    ...capitalByProduct.keys,
+  };
+
+  return {
+    for (final productId in productIds)
+      productId: _RecordProductMetrics(
+        sold: soldByProduct[productId] ?? 0.0,
+        gross: grossByProduct[productId] ?? 0.0,
+        capital: capitalByProduct[productId] ?? 0.0,
+      ),
+  };
+}
+
 _AnalyticsData _buildAnalytics({
   required List<Product> products,
   required List<OutingRecord> outings,
@@ -910,58 +1030,55 @@ _AnalyticsData _buildAnalytics({
   }).toList();
 
   final soldByProduct = <String, double>{};
+  final grossByProduct = <String, double>{};
+  final capitalByProduct = <String, double>{};
   final returnedByDay = <DateTime, double>{};
   final soldByDay = <DateTime, double>{};
   final discardedByDay = <DateTime, double>{};
   final replacedByDay = <DateTime, double>{};
 
   for (final record in monthOutings) {
-    final displayedMap = <String, double>{};
-    final returnedMap = <String, double>{};
-    final replacedMap = <String, double>{};
+    final metrics = _recordMetricsByProduct(
+      record: record,
+      productMap: productMap,
+    );
 
-    for (final line in record.displayedProducts) {
-      displayedMap.update(
-        line.productId,
-        (v) => v + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
-    for (final line in record.returnedProducts) {
-      returnedMap.update(
-        line.productId,
-        (v) => v + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
-    for (final line in record.replacedDiscardedProducts) {
-      replacedMap.update(
-        line.productId,
-        (v) => v + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
+    for (final entry in metrics.entries) {
+      final productId = entry.key;
+      final sold = entry.value.sold;
+      final gross = entry.value.gross;
+      final capital = entry.value.capital;
 
-    final productIds = {
-      ...displayedMap.keys,
-      ...returnedMap.keys,
-      ...replacedMap.keys,
-    };
-    for (final productId in productIds) {
-      final sold =
-          (displayedMap[productId] ?? 0) -
-          (returnedMap[productId] ?? 0) +
-          (replacedMap[productId] ?? 0);
       if (sold > 0) {
-        soldByProduct.update(productId, (v) => v + sold, ifAbsent: () => sold);
+        soldByProduct.update(
+          productId,
+          (value) => value + sold,
+          ifAbsent: () => sold,
+        );
+      }
+
+      if (gross > 0) {
+        grossByProduct.update(
+          productId,
+          (value) => value + gross,
+          ifAbsent: () => gross,
+        );
+      }
+
+      if (capital > 0) {
+        capitalByProduct.update(
+          productId,
+          (value) => value + capital,
+          ifAbsent: () => capital,
+        );
       }
     }
   }
 
   final allStats = soldByProduct.entries.map((entry) {
     final product = productMap[entry.key];
-    final gross = entry.value * (product?.sellingPrice ?? 0);
-    final capital = entry.value * (product?.costPrice ?? 0);
+    final gross = grossByProduct[entry.key] ?? 0.0;
+    final capital = capitalByProduct[entry.key] ?? 0.0;
     return _ProductGrossStat(
       productId: entry.key,
       productName: product?.name ?? 'Unknown Product',
@@ -1075,55 +1192,20 @@ _YearlyAnalyticsData _buildYearlyAnalytics({
 
     final monthIndex = record.date.month - 1;
     final dayIndex = record.date.day - 1;
-    final displayedMap = <String, double>{};
-    final returnedMap = <String, double>{};
-    final replacedMap = <String, double>{};
+    final metrics = _recordMetricsByProduct(
+      record: record,
+      productMap: productMap,
+    );
 
-    for (final line in record.displayedProducts) {
-      displayedMap.update(
-        line.productId,
-        (value) => value + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
-    for (final line in record.returnedProducts) {
-      returnedMap.update(
-        line.productId,
-        (value) => value + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
-    for (final line in record.replacedDiscardedProducts) {
-      replacedMap.update(
-        line.productId,
-        (value) => value + line.value,
-        ifAbsent: () => line.value,
-      );
-    }
-
-    final productIds = {
-      ...displayedMap.keys,
-      ...returnedMap.keys,
-      ...replacedMap.keys,
-    };
-
-    for (final productId in productIds) {
-      final sold =
-          (displayedMap[productId] ?? 0) -
-          (returnedMap[productId] ?? 0) +
-          (replacedMap[productId] ?? 0);
-      if (sold <= 0) {
+    for (final values in metrics.values) {
+      if (values.sold <= 0) {
         continue;
       }
 
-      final product = productMap[productId];
-      final sellingPrice = product?.sellingPrice ?? 0;
-      final costPrice = product?.costPrice ?? 0;
-
-      grossByMonth[monthIndex] += sold * sellingPrice;
-      capitalByMonth[monthIndex] += sold * costPrice;
-      dailyGrossByMonth[monthIndex][dayIndex] += sold * sellingPrice;
-      dailyCapitalByMonth[monthIndex][dayIndex] += sold * costPrice;
+      grossByMonth[monthIndex] += values.gross;
+      capitalByMonth[monthIndex] += values.capital;
+      dailyGrossByMonth[monthIndex][dayIndex] += values.gross;
+      dailyCapitalByMonth[monthIndex][dayIndex] += values.capital;
     }
   }
 

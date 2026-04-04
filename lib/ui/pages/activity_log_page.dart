@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
@@ -139,6 +140,90 @@ class ActivityLogPage extends StatelessWidget {
     );
   }
 
+  Widget _buildProductDetailsSection(
+    BuildContext context,
+    String? productDetailsJson,
+  ) {
+    if (productDetailsJson == null || productDetailsJson.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    try {
+      final productsList = jsonDecode(productDetailsJson) as List<dynamic>;
+      return Column(
+        children: [
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          Text(
+            'Product Details',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          ...productsList.asMap().entries.map((entry) {
+            final index = entry.key;
+            final product = entry.value as Map<String, dynamic>;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (index > 0)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6, bottom: 6),
+                    child: Divider(height: 1),
+                  ),
+                Text(
+                  product['productName'] ?? 'Unknown Product',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                _receiptLine(
+                  label: 'Qty Displayed',
+                  value: (product['displayed'] ?? 0.0).toStringAsFixed(2),
+                ),
+                _receiptLine(
+                  label: 'Qty Returned',
+                  value: (product['returned'] ?? 0.0).toStringAsFixed(2),
+                ),
+                _receiptLine(
+                  label: 'Qty Sold',
+                  value: (product['sold'] ?? 0.0).toStringAsFixed(2),
+                ),
+                _receiptLine(
+                  label: 'Selling Price',
+                  value:
+                      '₱${(product['sellingPrice'] ?? 0.0).toStringAsFixed(2)}',
+                ),
+                _receiptLine(
+                  label: 'Cost Price',
+                  value: '₱${(product['costPrice'] ?? 0.0).toStringAsFixed(2)}',
+                ),
+                _receiptLine(
+                  label: 'Revenue',
+                  value: '₱${(product['revenue'] ?? 0.0).toStringAsFixed(2)}',
+                ),
+                _receiptLine(
+                  label: 'Capital Cost',
+                  value: '₱${(product['capital'] ?? 0.0).toStringAsFixed(2)}',
+                ),
+                _receiptLine(
+                  label: 'Profit',
+                  value: '₱${(product['profit'] ?? 0.0).toStringAsFixed(2)}',
+                  emphasized: true,
+                ),
+              ],
+            );
+          }),
+        ],
+      );
+    } catch (e) {
+      return const SizedBox.shrink();
+    }
+  }
+
   Future<void> _showDetails(BuildContext context, ActivityLog item) {
     return showDialog<void>(
       context: context,
@@ -252,6 +337,7 @@ class ActivityLogPage extends StatelessWidget {
                         label: 'Lost',
                         value: item.lost!.toStringAsFixed(2),
                       ),
+                    _buildProductDetailsSection(context, item.productDetails),
                   ],
                   const SizedBox(height: 8),
                   const Divider(height: 1),

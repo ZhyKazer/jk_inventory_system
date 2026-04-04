@@ -15,6 +15,7 @@ import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
 import 'package:jk_inventory_system/ui/pages/outing_stepper_page.dart';
 import 'package:jk_inventory_system/ui/pages/products_page.dart';
 import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
 
@@ -259,49 +260,14 @@ class _HomeShellState extends State<HomeShell> {
     String? secondaryActionLabel,
     VoidCallback? onSecondaryAction,
   }) async {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.2),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: messageListenable == null
-                    ? Text(message)
-                    : ValueListenableBuilder<String>(
-                        valueListenable: messageListenable,
-                        builder: (_, value, __) => Text(value),
-                      ),
-              ),
-            ],
-          ),
-          actions: secondaryActionLabel != null && onSecondaryAction != null
-              ? [
-                  TextButton(
-                    onPressed: onSecondaryAction,
-                    child: Text(secondaryActionLabel),
-                  ),
-                ]
-              : null,
-        ),
-      ),
+    await AppLoading.run<void>(
+      context,
+      action: action,
+      message: message,
+      messageListenable: messageListenable,
+      secondaryActionLabel: secondaryActionLabel,
+      onSecondaryAction: onSecondaryAction,
     );
-
-    try {
-      await action();
-    } finally {
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
   }
 
   void _showMessage(String message) {

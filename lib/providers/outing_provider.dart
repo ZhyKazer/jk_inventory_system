@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
@@ -485,6 +486,27 @@ class OutingProvider extends ChangeNotifier {
     );
 
     await _repository.create(record);
+
+    // Build product details JSON for activity log
+    final productDetailsJson = jsonEncode(
+      summary.perProduct
+          .map(
+            (calc) => {
+              'productId': calc.productId,
+              'productName': calc.productName,
+              'displayed': calc.displayed,
+              'returned': calc.returned,
+              'sold': calc.sold,
+              'sellingPrice': calc.currentSelling,
+              'costPrice': calc.currentCapital,
+              'revenue': calc.revenue,
+              'capital': calc.capitalCost,
+              'profit': calc.approxProfit,
+            },
+          )
+          .toList(),
+    );
+
     await _activityLogProvider.log(
       actionType: ActivityActionType.outingSubmitted,
       title: 'Outing submitted',
@@ -498,6 +520,7 @@ class OutingProvider extends ChangeNotifier {
       sold: summary.totalSold,
       profit: summary.approximateProfit,
       lost: summary.totalLost,
+      productDetails: productDetailsJson,
     );
     await load();
     startDraft();

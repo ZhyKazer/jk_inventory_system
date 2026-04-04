@@ -26,6 +26,7 @@ class ActivityLog {
     this.sold,
     this.profit,
     this.lost,
+    this.productDetails,
   });
 
   final String id;
@@ -41,6 +42,8 @@ class ActivityLog {
   final double? sold;
   final double? profit;
   final double? lost;
+  final String?
+  productDetails; // JSON string containing per-product selling details
 }
 
 class ActivityLogAdapter extends TypeAdapter<ActivityLog> {
@@ -70,6 +73,14 @@ class ActivityLogAdapter extends TypeAdapter<ActivityLog> {
     final profit = hasProfit ? reader.readDouble() : null;
     final hasLost = reader.readBool();
     final lost = hasLost ? reader.readDouble() : null;
+    String? productDetails;
+    try {
+      final hasProductDetails = reader.readBool();
+      productDetails = hasProductDetails ? reader.readString() : null;
+    } on RangeError {
+      // Backward compatibility: older persisted logs don't include this field.
+      productDetails = null;
+    }
 
     return ActivityLog(
       id: id,
@@ -85,6 +96,7 @@ class ActivityLogAdapter extends TypeAdapter<ActivityLog> {
       sold: sold,
       profit: profit,
       lost: lost,
+      productDetails: productDetails,
     );
   }
 
@@ -116,5 +128,7 @@ class ActivityLogAdapter extends TypeAdapter<ActivityLog> {
     if (obj.profit != null) writer.writeDouble(obj.profit!);
     writer.writeBool(obj.lost != null);
     if (obj.lost != null) writer.writeDouble(obj.lost!);
+    writer.writeBool(obj.productDetails != null);
+    if (obj.productDetails != null) writer.writeString(obj.productDetails!);
   }
 }

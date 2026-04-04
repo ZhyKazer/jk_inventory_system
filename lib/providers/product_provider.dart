@@ -192,6 +192,8 @@ class ProductProvider extends ChangeNotifier {
     required String id,
     required String name,
     required String categoryId,
+    String? imagePath,
+    bool requireProductImage = false,
   }) async {
     final nameError = validateName(name, editingId: id);
     if (nameError != null) return nameError;
@@ -199,10 +201,19 @@ class ProductProvider extends ChangeNotifier {
     final categoryError = validateCategory(categoryId);
     if (categoryError != null) return categoryError;
 
+    final normalizedImagePath = imagePath?.trim();
+    if (requireProductImage &&
+        (normalizedImagePath == null || normalizedImagePath.isEmpty)) {
+      return 'Product image is required.';
+    }
+
     final current = _items.firstWhere((item) => item.id == id);
     final updated = current.copyWith(
       name: name.trim(),
       categoryId: categoryId,
+      imagePath: (normalizedImagePath == null || normalizedImagePath.isEmpty)
+          ? null
+          : normalizedImagePath,
       updatedAt: DateTime.now(),
     );
     await _repository.update(updated);

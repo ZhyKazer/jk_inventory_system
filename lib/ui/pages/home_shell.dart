@@ -654,6 +654,11 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: Text(titles[_currentIndex]),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.list_alt_outlined),
+            onPressed: _onManageCategories,
+            tooltip: 'Categories',
+          ),
           Builder(
             builder: (context) => IconButton(
               icon: const Icon(Icons.settings_outlined),

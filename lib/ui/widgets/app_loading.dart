@@ -50,6 +50,10 @@ class AppLoading {
       ),
     );
 
+    // Let the loading dialog render before starting heavy async work.
+    await Future<void>.delayed(Duration.zero);
+    await WidgetsBinding.instance.endOfFrame;
+
     try {
       return await action();
     } finally {

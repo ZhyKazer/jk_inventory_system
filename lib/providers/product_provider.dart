@@ -193,6 +193,8 @@ class ProductProvider extends ChangeNotifier {
     required String name,
     required String categoryId,
     String? imagePath,
+    double? costPrice,
+    double? sellingPrice,
     bool requireProductImage = false,
   }) async {
     final nameError = validateName(name, editingId: id);
@@ -214,6 +216,8 @@ class ProductProvider extends ChangeNotifier {
       imagePath: (normalizedImagePath == null || normalizedImagePath.isEmpty)
           ? null
           : normalizedImagePath,
+      costPrice: costPrice ?? current.costPrice,
+      sellingPrice: sellingPrice ?? current.sellingPrice,
       updatedAt: DateTime.now(),
     );
     await _repository.update(updated);

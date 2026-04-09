@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
@@ -8,6 +9,44 @@ class ActivityLogPage extends StatelessWidget {
   const ActivityLogPage({super.key, required this.activityLogProvider});
 
   final ActivityLogProvider activityLogProvider;
+  static final Map<String, String> _actorUsernameCache = <String, String>{};
+
+  Future<String> _resolveActorDisplay(String? actorUid) async {
+    final uid = (actorUid ?? '').trim();
+    if (uid.isEmpty) {
+      return 'N/A';
+    }
+
+    final cached = _actorUsernameCache[uid];
+    if (cached != null && cached.isNotEmpty) {
+      return '$cached ($uid)';
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final data = snapshot.data();
+      final username = (data?['username'] as String?)?.trim();
+      if (username != null && username.isNotEmpty) {
+        _actorUsernameCache[uid] = username;
+        return '$username ($uid)';
+      }
+    } catch (_) {}
+
+    return uid;
+  }
+
+  Widget _buildActorLine(ActivityLog item) {
+    return FutureBuilder<String>(
+      future: _resolveActorDisplay(item.actorUid),
+      builder: (context, snapshot) {
+        final value = snapshot.hasData ? snapshot.data! : 'Loading...';
+        return _receiptLine(label: 'Actor', value: value);
+      },
+    );
+  }
 
   List<ActivityLog> _itemsForTab(List<ActivityLog> items, _ActivityTab tab) {
     switch (tab) {
@@ -279,6 +318,7 @@ class ActivityLogPage extends StatelessWidget {
                     label: 'Reference ID',
                     value: item.referenceId ?? 'N/A',
                   ),
+                  _buildActorLine(item),
                   _receiptLine(label: 'Activity ID', value: item.id),
                   const SizedBox(height: 8),
                   Text(

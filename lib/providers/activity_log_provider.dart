@@ -2,11 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
+import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 
 class ActivityLogProvider extends ChangeNotifier {
-  ActivityLogProvider(this._repository);
+  ActivityLogProvider(this._repository, {FirebaseSyncService? syncService})
+    : _syncService = syncService ?? FirebaseSyncService();
 
   final ActivityLogRepositoryInterface _repository;
+  final FirebaseSyncService _syncService;
   final _uuid = const Uuid();
 
   List<ActivityLog> _items = [];
@@ -50,6 +53,11 @@ class ActivityLogProvider extends ChangeNotifier {
     );
 
     await _repository.create(item);
+    try {
+      await _syncService.upsertActivity(item);
+    } catch (error) {
+      debugPrint('Firebase activity auto-sync failed: $error');
+    }
     await load();
   }
 }

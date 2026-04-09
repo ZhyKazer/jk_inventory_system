@@ -17,6 +17,7 @@ class InventoryStorage {
   static const stockBatchesBoxName = 'stock_batches';
   static const outingsBoxName = 'outings';
   static const activityLogsBoxName = 'activity_logs';
+  static const authSessionBoxName = 'auth_session';
 
   static Future<void> initialize() async {
     await Hive.initFlutter();
@@ -42,6 +43,7 @@ class InventoryStorage {
     await Hive.openBox<StockBatch>(stockBatchesBoxName);
     await Hive.openBox<OutingRecord>(outingsBoxName);
     await Hive.openBox<ActivityLog>(activityLogsBoxName);
+    await Hive.openBox<dynamic>(authSessionBoxName);
   }
 
   /// Returns a local repository facade backed by the already-opened Hive boxes.

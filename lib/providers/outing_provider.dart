@@ -9,6 +9,7 @@ import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
 import 'package:jk_inventory_system/services/inventory_stock_calculator.dart';
+import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 
 enum OutingStepType { displayed, returned, discarded, replaced }
 
@@ -69,13 +70,15 @@ class OutingProvider extends ChangeNotifier {
     this._repository,
     this._getBatches,
     this._getProducts,
-    this._activityLogProvider,
-  );
+    this._activityLogProvider, {
+    FirebaseSyncService? syncService,
+  }) : _syncService = syncService ?? FirebaseSyncService();
 
   final OutingRepositoryInterface _repository;
   final List<StockBatch> Function() _getBatches;
   final List<Product> Function() _getProducts;
   final ActivityLogProvider _activityLogProvider;
+  final FirebaseSyncService _syncService;
   final InventoryStockCalculator _stockCalculator =
       const InventoryStockCalculator();
   final _uuid = const Uuid();
@@ -486,6 +489,11 @@ class OutingProvider extends ChangeNotifier {
     );
 
     await _repository.create(record);
+    try {
+      await _syncService.upsertOuting(record);
+    } catch (error) {
+      debugPrint('Firebase outing auto-sync failed: $error');
+    }
 
     // Build product details JSON for activity log
     final productDetailsJson = jsonEncode(

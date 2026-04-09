@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:jk_inventory_system/models/app_user_profile.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/services/backup_service.dart';
+import 'package:jk_inventory_system/services/firebase_auth_service.dart';
+import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 import 'package:jk_inventory_system/ui/pages/activity_log_page.dart';
 import 'package:jk_inventory_system/ui/pages/analytics_page.dart';
 import 'package:jk_inventory_system/ui/pages/batches_page.dart';
@@ -14,6 +17,7 @@ import 'package:jk_inventory_system/ui/pages/categories_page.dart';
 import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
 import 'package:jk_inventory_system/ui/pages/outing_stepper_page.dart';
 import 'package:jk_inventory_system/ui/pages/products_page.dart';
+import 'package:jk_inventory_system/ui/pages/register_account_page.dart';
 import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
 import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
@@ -31,6 +35,9 @@ class HomeShell extends StatefulWidget {
     required this.onThemeSelected,
     required this.selectedCustomThemeColor,
     required this.onCustomThemeColorSelected,
+    required this.rememberedUsername,
+    required this.currentRole,
+    required this.onLoggedOut,
   });
 
   final ActivityLogProvider activityLogProvider;
@@ -42,6 +49,9 @@ class HomeShell extends StatefulWidget {
   final ValueChanged<AppThemeOption> onThemeSelected;
   final Color selectedCustomThemeColor;
   final ValueChanged<Color> onCustomThemeColorSelected;
+  final String? rememberedUsername;
+  final AppRole currentRole;
+  final Future<void> Function() onLoggedOut;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -51,6 +61,8 @@ class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
   bool _actionsFabExpanded = false;
   final BackupService _backupService = BackupService();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
+  final FirebaseSyncService _firebaseSyncService = FirebaseSyncService();
 
   final GlobalKey _mainActionsFabKey = GlobalKey();
   final GlobalKey _addProductFabKey = GlobalKey();
@@ -127,7 +139,20 @@ class _HomeShellState extends State<HomeShell> {
     ),
   ];
 
+  bool get _canMutateProduct => widget.currentRole == AppRole.admin;
+  bool get _canMutateCategory => widget.currentRole == AppRole.admin;
+  bool get _canCreateBatch => widget.currentRole == AppRole.admin;
+  bool get _canStartOuting => widget.currentRole != AppRole.view;
+  bool get _canRegisterAccount => widget.currentRole == AppRole.admin;
+  bool get _canSyncToFirebase => widget.currentRole == AppRole.admin;
+
+  String _roleName() => widget.currentRole.label;
+
   Future<void> _onAddProduct() async {
+    if (!_canMutateProduct) {
+      _showMessage('${_roleName()} role cannot add products.');
+      return;
+    }
     setState(() => _actionsFabExpanded = false);
     if (widget.categoryProvider.items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -143,11 +168,19 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _onAddCategory() async {
+    if (!_canMutateCategory) {
+      _showMessage('${_roleName()} role cannot add categories.');
+      return;
+    }
     setState(() => _actionsFabExpanded = false);
     await showCategoryFormSheet(context, provider: widget.categoryProvider);
   }
 
   Future<void> _onAddBatch() async {
+    if (!_canCreateBatch) {
+      _showMessage('${_roleName()} role cannot add stock batches.');
+      return;
+    }
     setState(() => _actionsFabExpanded = false);
     final created = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -165,6 +198,10 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _onStartOuting() async {
+    if (!_canStartOuting) {
+      _showMessage('${_roleName()} role cannot start outing flow.');
+      return;
+    }
     setState(() => _actionsFabExpanded = false);
     final submitted = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
@@ -188,6 +225,7 @@ class _HomeShellState extends State<HomeShell> {
         builder: (_) => CategoriesPage(
           categoryProvider: widget.categoryProvider,
           productProvider: widget.productProvider,
+          canMutateCategories: _canMutateCategory,
         ),
       ),
     );
@@ -442,8 +480,9 @@ class _HomeShellState extends State<HomeShell> {
 
       await _showLoadingWhile(() async {
         await _backupService.restoreFromQuickBackup(selected.path);
+        await _firebaseSyncService.syncLocalToFirestore(overwriteRemote: true);
         await _reloadAllProviders();
-      }, message: 'Restoring backup...');
+      }, message: 'Restoring backup and overwriting Firebase...');
 
       _showMessage('Restore completed from ${selected.fileName}.');
     } on BackupException catch (error) {
@@ -468,8 +507,9 @@ class _HomeShellState extends State<HomeShell> {
 
       await _showLoadingWhile(() async {
         await _backupService.restoreFromAnyFilePath(selectedPath);
+        await _firebaseSyncService.syncLocalToFirestore(overwriteRemote: true);
         await _reloadAllProviders();
-      }, message: 'Importing and restoring backup...');
+      }, message: 'Importing backup and overwriting Firebase...');
 
       _showMessage('Imported and restored from $fileName.');
     } on BackupException catch (error) {
@@ -495,6 +535,158 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  Future<void> _openBackupOptions() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.backup_outlined),
+                title: const Text('Backup Data'),
+                subtitle: const Text(
+                  'Create a JSON backup in your selected folder.',
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _onBackupData();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings_backup_restore_outlined),
+                title: const Text('Restore Data'),
+                subtitle: const Text('Restore from the 5 most recent backups.'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _onRestoreData();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.file_upload_outlined),
+                title: const Text('Import Backup'),
+                subtitle: const Text(
+                  'Import and restore from any JSON backup file.',
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _onImportBackup();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('Change Backup Folder'),
+                subtitle: const Text(
+                  'Pick a different folder for backup files.',
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _onChangeBackupDirectory();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onSyncLocalToFirebase() async {
+    if (!_canSyncToFirebase) {
+      _showMessage('Only Admin can sync data to Firebase.');
+      return;
+    }
+
+    final progressMessage = ValueNotifier<String>('Preparing local data...');
+
+    try {
+      late FirebaseSyncSummary summary;
+      await _showLoadingWhile(
+        () async {
+          summary = await _firebaseSyncService.syncLocalToFirestore(
+            onProgress: (message) {
+              if (!mounted) return;
+              progressMessage.value = message;
+            },
+          );
+        },
+        message: 'Syncing to Firebase...',
+        messageListenable: progressMessage,
+      );
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Sync Completed'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Total synced: ${summary.total}'),
+              Text('Categories: ${summary.categories}'),
+              Text('Products: ${summary.products}'),
+              Text('Stock batches: ${summary.stockBatches}'),
+              Text('Outings: ${summary.outings}'),
+              Text('Activities: ${summary.activities}'),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      _showMessage('Failed to sync local data to Firebase.');
+    } finally {
+      progressMessage.dispose();
+    }
+  }
+
+  Future<void> _openRegisterAccount() async {
+    if (!_canRegisterAccount) {
+      _showMessage('Only Admin can register accounts.');
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RegisterAccountPage(authService: _firebaseAuthService),
+      ),
+    );
+  }
+
+  Future<void> _onLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('You will need to enter your 6-digit PIN again.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (mounted) {
+      Navigator.of(context).maybePop();
+    }
+    await widget.onLoggedOut();
+  }
+
   Widget _buildAnimatedActionButton({
     required int index,
     required Widget child,
@@ -518,6 +710,56 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Widget _buildExpandableActionButtons() {
+    final actionButtons = <Widget>[
+      if (_canMutateProduct)
+        FloatingActionButton.extended(
+          key: _addProductFabKey,
+          heroTag: 'addProductFab',
+          onPressed: _onAddProduct,
+          icon: const Icon(Icons.inventory_2_outlined),
+          label: const Text('Add Product'),
+        ),
+      if (_canMutateCategory)
+        FloatingActionButton.extended(
+          key: _addCategoryFabKey,
+          heroTag: 'addCategoryFab',
+          onPressed: _onAddCategory,
+          icon: const Icon(Icons.category_outlined),
+          label: const Text('Add Category'),
+        ),
+      if (_canCreateBatch)
+        FloatingActionButton.extended(
+          key: _addBatchFabKey,
+          heroTag: 'addBatchFab',
+          onPressed: _onAddBatch,
+          icon: const Icon(Icons.settings_backup_restore_outlined),
+          label: const Text('Add Stock Batch'),
+        ),
+      if (_canStartOuting)
+        FloatingActionButton.extended(
+          key: _outingFlowFabKey,
+          heroTag: 'outingFlowFab',
+          onPressed: _onStartOuting,
+          icon: const Icon(Icons.format_list_numbered_rtl_outlined),
+          label: const Text('Start Outing Flow'),
+        ),
+      if (_canMutateCategory)
+        FloatingActionButton.extended(
+          key: _manageCategoriesFabKey,
+          heroTag: 'manageCategoriesFab',
+          onPressed: _onManageCategories,
+          icon: const Icon(Icons.list_alt_outlined),
+          label: const Text('Manage Categories'),
+        ),
+      FloatingActionButton.extended(
+        key: _helpFabKey,
+        heroTag: 'helpFab',
+        onPressed: _onHelpInActionBar,
+        icon: const Icon(Icons.question_answer_rounded),
+        label: const Text('Help'),
+      ),
+    ];
+
     return ClipRect(
       child: AnimatedSize(
         duration: const Duration(milliseconds: 260),
@@ -533,66 +775,11 @@ class _HomeShellState extends State<HomeShell> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _buildAnimatedActionButton(
-                  index: 0,
-                  child: FloatingActionButton.extended(
-                    key: _addProductFabKey,
-                    heroTag: 'addProductFab',
-                    onPressed: _onAddProduct,
-                    icon: const Icon(Icons.inventory_2_outlined),
-                    label: const Text('Add Product'),
+                for (var index = 0; index < actionButtons.length; index++)
+                  _buildAnimatedActionButton(
+                    index: index,
+                    child: actionButtons[index],
                   ),
-                ),
-                _buildAnimatedActionButton(
-                  index: 1,
-                  child: FloatingActionButton.extended(
-                    key: _addCategoryFabKey,
-                    heroTag: 'addCategoryFab',
-                    onPressed: _onAddCategory,
-                    icon: const Icon(Icons.category_outlined),
-                    label: const Text('Add Category'),
-                  ),
-                ),
-                _buildAnimatedActionButton(
-                  index: 2,
-                  child: FloatingActionButton.extended(
-                    key: _addBatchFabKey,
-                    heroTag: 'addBatchFab',
-                    onPressed: _onAddBatch,
-                    icon: const Icon(Icons.settings_backup_restore_outlined),
-                    label: const Text('Add Stock Batch'),
-                  ),
-                ),
-                _buildAnimatedActionButton(
-                  index: 3,
-                  child: FloatingActionButton.extended(
-                    key: _outingFlowFabKey,
-                    heroTag: 'outingFlowFab',
-                    onPressed: _onStartOuting,
-                    icon: const Icon(Icons.format_list_numbered_rtl_outlined),
-                    label: const Text('Start Outing Flow'),
-                  ),
-                ),
-                _buildAnimatedActionButton(
-                  index: 4,
-                  child: FloatingActionButton.extended(
-                    key: _manageCategoriesFabKey,
-                    heroTag: 'manageCategoriesFab',
-                    onPressed: _onManageCategories,
-                    icon: const Icon(Icons.list_alt_outlined),
-                    label: const Text('Manage Categories'),
-                  ),
-                ),
-                _buildAnimatedActionButton(
-                  index: 5,
-                  child: FloatingActionButton.extended(
-                    key: _helpFabKey,
-                    heroTag: 'helpFab',
-                    onPressed: _onHelpInActionBar,
-                    icon: const Icon(Icons.question_answer_rounded),
-                    label: const Text('Help'),
-                  ),
-                ),
               ],
             ),
           ),
@@ -608,6 +795,7 @@ class _HomeShellState extends State<HomeShell> {
         productProvider: widget.productProvider,
         categoryProvider: widget.categoryProvider,
         outingProvider: widget.outingProvider,
+        canMutateProducts: _canMutateProduct,
       ),
       BatchesPage(
         stockBatchProvider: widget.stockBatchProvider,
@@ -758,35 +946,43 @@ class _HomeShellState extends State<HomeShell> {
                   ),
                 ),
               const Divider(height: 24),
-              ListTile(
-                leading: const Icon(Icons.backup_outlined),
-                title: const Text('Backup Data'),
-                subtitle: const Text(
-                  'Create a JSON backup in your selected folder.',
+              if ((widget.rememberedUsername ?? '').trim().isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: Text(widget.rememberedUsername!.trim()),
+                  subtitle: Text('Current saved account • ${_roleName()}'),
                 ),
-                onTap: _onBackupData,
+              ListTile(
+                leading: const Icon(Icons.logout_outlined),
+                title: const Text('Logout'),
+                subtitle: const Text(
+                  'Return to login and unlock using your 6-digit PIN.',
+                ),
+                onTap: _onLogout,
               ),
               ListTile(
-                leading: const Icon(Icons.folder_open_outlined),
-                title: const Text('Change Backup Folder'),
+                leading: const Icon(Icons.person_add_alt_1_outlined),
+                title: const Text('Register Account'),
                 subtitle: const Text(
-                  'Pick a different folder for backup files.',
+                  'Create a new View, Moderator, or Admin account.',
                 ),
-                onTap: _onChangeBackupDirectory,
+                onTap: _canRegisterAccount ? _openRegisterAccount : null,
               ),
               ListTile(
-                leading: const Icon(Icons.settings_backup_restore_outlined),
-                title: const Text('Restore Data'),
-                subtitle: const Text('Restore from the 5 most recent backups.'),
-                onTap: _onRestoreData,
+                leading: const Icon(Icons.backup_table_outlined),
+                title: const Text('Backup Options'),
+                subtitle: const Text(
+                  'Backup, restore, import, and change backup folder.',
+                ),
+                onTap: _openBackupOptions,
               ),
               ListTile(
-                leading: const Icon(Icons.file_upload_outlined),
-                title: const Text('Import Backup'),
+                leading: const Icon(Icons.cloud_upload_outlined),
+                title: const Text('Sync Local to Firebase'),
                 subtitle: const Text(
-                  'Import and restore from any JSON backup file.',
+                  'Manually force-push local backup cache to Firebase.',
                 ),
-                onTap: _onImportBackup,
+                onTap: _canSyncToFirebase ? _onSyncLocalToFirebase : null,
               ),
             ],
           ),

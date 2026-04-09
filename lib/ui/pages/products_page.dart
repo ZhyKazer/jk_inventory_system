@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
@@ -8,6 +6,7 @@ import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
+import 'package:jk_inventory_system/ui/widgets/product_image_view.dart';
 
 enum ProductSortTarget { productAlphabetical, categoryAlphabetical, qty }
 
@@ -19,11 +18,13 @@ class ProductsPage extends StatefulWidget {
     required this.productProvider,
     required this.categoryProvider,
     required this.outingProvider,
+    required this.canMutateProducts,
   });
 
   final ProductProvider productProvider;
   final CategoryProvider categoryProvider;
   final OutingProvider outingProvider;
+  final bool canMutateProducts;
 
   @override
   State<ProductsPage> createState() => _ProductsPageState();
@@ -59,6 +60,14 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   Future<void> _confirmDelete(BuildContext context, String productId) async {
+    if (!widget.canMutateProducts) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You do not have permission to delete products.'),
+        ),
+      );
+      return;
+    }
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -97,6 +106,14 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   Future<void> _confirmDeleteSelected(BuildContext context) async {
+    if (!widget.canMutateProducts) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You do not have permission to delete products.'),
+        ),
+      );
+      return;
+    }
     if (_selectedProductIds.isEmpty) return;
 
     final count = _selectedProductIds.length;
@@ -183,18 +200,10 @@ class _ProductsPageState extends State<ProductsPage> {
                       child: SizedBox(
                         width: 220,
                         height: 220,
-                        child: Image.file(
-                          File(product.imagePath!),
+                        child: ProductImageView(
+                          imagePath: product.imagePath,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            child: const Icon(
-                              Icons.broken_image_outlined,
-                              size: 36,
-                            ),
-                          ),
+                          iconSize: 36,
                         ),
                       ),
                     ),
@@ -483,7 +492,9 @@ class _ProductsPageState extends State<ProductsPage> {
                     ),
                     const SizedBox(width: 8),
                     FilledButton.tonalIcon(
-                      onPressed: () => _confirmDeleteSelected(context),
+                      onPressed: widget.canMutateProducts
+                          ? () => _confirmDeleteSelected(context)
+                          : null,
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Delete'),
                     ),
@@ -611,6 +622,8 @@ class _ProductsPageState extends State<ProductsPage> {
                             IconButton(
                               onPressed: _isSelectionMode
                                   ? null
+                                  : !widget.canMutateProducts
+                                  ? null
                                   : categories.isEmpty
                                   ? null
                                   : () => showProductFormSheet(
@@ -623,6 +636,8 @@ class _ProductsPageState extends State<ProductsPage> {
                             ),
                             IconButton(
                               onPressed: _isSelectionMode
+                                  ? null
+                                  : !widget.canMutateProducts
                                   ? null
                                   : () => _confirmDelete(context, product.id),
                               icon: const Icon(Icons.delete_outline),
@@ -651,13 +666,10 @@ class _ProductsPageState extends State<ProductsPage> {
       child: SizedBox(
         width: 40,
         height: 40,
-        child: Image.file(
-          File(product.imagePath!),
+        child: ProductImageView(
+          imagePath: product.imagePath,
           fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => Container(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: const Icon(Icons.broken_image_outlined, size: 20),
-          ),
+          iconSize: 20,
         ),
       ),
     );

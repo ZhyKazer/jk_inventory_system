@@ -10,12 +10,22 @@ class CategoriesPage extends StatelessWidget {
     super.key,
     required this.categoryProvider,
     required this.productProvider,
+    required this.canMutateCategories,
   });
 
   final CategoryProvider categoryProvider;
   final ProductProvider productProvider;
+  final bool canMutateCategories;
 
   Future<void> _confirmDelete(BuildContext context, Category category) async {
+    if (!canMutateCategories) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You do not have permission to delete categories.'),
+        ),
+      );
+      return;
+    }
     final usedByProduct = productProvider.items.any(
       (item) => item.categoryId == category.id,
     );
@@ -88,15 +98,19 @@ class CategoriesPage extends StatelessWidget {
                   spacing: 4,
                   children: [
                     IconButton(
-                      onPressed: () => showCategoryFormSheet(
-                        context,
-                        provider: categoryProvider,
-                        editing: category,
-                      ),
+                      onPressed: canMutateCategories
+                          ? () => showCategoryFormSheet(
+                              context,
+                              provider: categoryProvider,
+                              editing: category,
+                            )
+                          : null,
                       icon: const Icon(Icons.edit_outlined),
                     ),
                     IconButton(
-                      onPressed: () => _confirmDelete(context, category),
+                      onPressed: canMutateCategories
+                          ? () => _confirmDelete(context, category)
+                          : null,
                       icon: const Icon(Icons.delete_outline),
                     ),
                   ],
@@ -107,8 +121,9 @@ class CategoriesPage extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () =>
-            showCategoryFormSheet(context, provider: categoryProvider),
+        onPressed: canMutateCategories
+            ? () => showCategoryFormSheet(context, provider: categoryProvider)
+            : null,
         child: const Icon(Icons.add),
       ),
     );

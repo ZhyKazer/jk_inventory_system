@@ -6,12 +6,18 @@ import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
+import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 
 class StockBatchProvider extends ChangeNotifier {
-  StockBatchProvider(this._repository, this._activityLogProvider);
+  StockBatchProvider(
+    this._repository,
+    this._activityLogProvider, {
+    FirebaseSyncService? syncService,
+  }) : _syncService = syncService ?? FirebaseSyncService();
 
   final StockBatchRepositoryInterface _repository;
   final ActivityLogProvider _activityLogProvider;
+  final FirebaseSyncService _syncService;
   final _uuid = const Uuid();
 
   List<StockBatch> _items = [];
@@ -70,6 +76,11 @@ class StockBatchProvider extends ChangeNotifier {
     );
 
     await _repository.create(batch);
+    try {
+      await _syncService.upsertStockBatch(batch);
+    } catch (error) {
+      debugPrint('Firebase stock batch auto-sync failed: $error');
+    }
     await _activityLogProvider.log(
       actionType: ActivityActionType.batchCreated,
       title: 'Stock batch created',

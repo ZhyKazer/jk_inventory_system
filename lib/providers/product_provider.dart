@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/product.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
+import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 
 class ProductCreateDraft {
   ProductCreateDraft({required this.name, this.imagePath});
@@ -14,10 +15,15 @@ class ProductCreateDraft {
 }
 
 class ProductProvider extends ChangeNotifier {
-  ProductProvider(this._repository, this._activityLogProvider);
+  ProductProvider(
+    this._repository,
+    this._activityLogProvider, {
+    FirebaseSyncService? syncService,
+  }) : _syncService = syncService ?? FirebaseSyncService();
 
   final ProductRepositoryInterface _repository;
   final ActivityLogProvider _activityLogProvider;
+  final FirebaseSyncService _syncService;
   final _uuid = const Uuid();
 
   List<Product> _items = [];
@@ -116,6 +122,11 @@ class ProductProvider extends ChangeNotifier {
     );
 
     await _repository.create(product);
+    try {
+      await _syncService.upsertProduct(product);
+    } catch (error) {
+      debugPrint('Firebase product auto-sync (create) failed: $error');
+    }
     await _activityLogProvider.log(
       actionType: ActivityActionType.productCreated,
       title: 'Product created',
@@ -176,6 +187,11 @@ class ProductProvider extends ChangeNotifier {
       );
 
       await _repository.create(product);
+      try {
+        await _syncService.upsertProduct(product);
+      } catch (error) {
+        debugPrint('Firebase product auto-sync (bulk create) failed: $error');
+      }
       await _activityLogProvider.log(
         actionType: ActivityActionType.productCreated,
         title: 'Product created',
@@ -221,6 +237,11 @@ class ProductProvider extends ChangeNotifier {
       updatedAt: DateTime.now(),
     );
     await _repository.update(updated);
+    try {
+      await _syncService.upsertProduct(updated);
+    } catch (error) {
+      debugPrint('Firebase product auto-sync (update) failed: $error');
+    }
     await _activityLogProvider.log(
       actionType: ActivityActionType.productUpdated,
       title: 'Product updated',
@@ -247,6 +268,11 @@ class ProductProvider extends ChangeNotifier {
       );
 
       await _repository.update(updated);
+      try {
+        await _syncService.upsertProduct(updated);
+      } catch (error) {
+        debugPrint('Firebase product auto-sync (price update) failed: $error');
+      }
       currentById[item.productId] = updated;
     }
 
@@ -266,7 +292,10 @@ class ProductProvider extends ChangeNotifier {
 
         final existing = latestByProduct[item.productId];
         if (existing == null || batch.createdAt.isAfter(existing.createdAt)) {
-          latestByProduct[item.productId] = (createdAt: batch.createdAt, item: item);
+          latestByProduct[item.productId] = (
+            createdAt: batch.createdAt,
+            item: item,
+          );
         }
       }
     }
@@ -278,7 +307,8 @@ class ProductProvider extends ChangeNotifier {
       final latest = latestByProduct[product.id];
       if (latest == null) continue;
 
-      final shouldRestoreCost = product.costPrice <= 0 && latest.item.originalPrice > 0;
+      final shouldRestoreCost =
+          product.costPrice <= 0 && latest.item.originalPrice > 0;
       final shouldRestoreSelling =
           product.sellingPrice <= 0 && latest.item.sellingPrice > 0;
 
@@ -287,13 +317,23 @@ class ProductProvider extends ChangeNotifier {
       }
 
       final updated = product.copyWith(
-        costPrice: shouldRestoreCost ? latest.item.originalPrice : product.costPrice,
-        sellingPrice:
-            shouldRestoreSelling ? latest.item.sellingPrice : product.sellingPrice,
+        costPrice: shouldRestoreCost
+            ? latest.item.originalPrice
+            : product.costPrice,
+        sellingPrice: shouldRestoreSelling
+            ? latest.item.sellingPrice
+            : product.sellingPrice,
         updatedAt: DateTime.now(),
       );
 
       await _repository.update(updated);
+      try {
+        await _syncService.upsertProduct(updated);
+      } catch (error) {
+        debugPrint(
+          'Firebase product auto-sync (restore prices) failed: $error',
+        );
+      }
       hasChanges = true;
     }
 
@@ -305,6 +345,11 @@ class ProductProvider extends ChangeNotifier {
   Future<void> delete(String id) async {
     final product = _items.firstWhere((item) => item.id == id);
     await _repository.delete(id);
+    try {
+      await _syncService.deleteProduct(id);
+    } catch (error) {
+      debugPrint('Firebase product auto-sync (delete) failed: $error');
+    }
     await _activityLogProvider.log(
       actionType: ActivityActionType.productDeleted,
       title: 'Product deleted',

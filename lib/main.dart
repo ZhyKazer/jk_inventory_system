@@ -1,19 +1,25 @@
+import 'dart:io';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/firebase_options.dart';
 import 'package:jk_inventory_system/models/app_user_profile.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/services/auth_session_service.dart';
+import 'package:jk_inventory_system/services/apk_update_service.dart';
 import 'package:jk_inventory_system/services/firebase_auth_service.dart';
 import 'package:jk_inventory_system/services/firebase_sync_service.dart';
 import 'package:jk_inventory_system/services/inventory_storage.dart';
+import 'package:jk_inventory_system/services/startup_policy_service.dart';
 import 'package:jk_inventory_system/ui/pages/home_shell.dart';
 import 'package:jk_inventory_system/ui/pages/login_page.dart';
 import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,12 +46,25 @@ class _InventoryAppState extends State<InventoryApp> {
   final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
   final AuthSessionService _authSessionService = AuthSessionService();
   final FirebaseSyncService _firebaseSyncService = FirebaseSyncService();
+  final StartupPolicyService _startupPolicyService = StartupPolicyService();
+  final ApkUpdateService _apkUpdateService = ApkUpdateService();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
   String? _rememberedUsername;
   AppRole? _currentRole;
   bool _authReady = false;
   bool _dataReady = false;
   bool _isLoggedIn = false;
   String? _startupError;
+  StartupPolicyResult? _startupPolicyResult;
+  bool _isUpdatingApk = false;
+  String? _updateStatusMessage;
+
+  void _showSnackMessage(String message) {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   @override
   void initState() {
@@ -74,11 +93,25 @@ class _InventoryAppState extends State<InventoryApp> {
     if (!mounted) return;
     setState(() {
       _startupError = null;
+      _startupPolicyResult = null;
       _dataReady = false;
       _authReady = false;
     });
 
     try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final startupPolicy = await _startupPolicyService.check(
+        currentVersion: packageInfo.version,
+      );
+
+      if (startupPolicy.blockType != StartupBlockType.none) {
+        if (!mounted) return;
+        setState(() {
+          _startupPolicyResult = startupPolicy;
+        });
+        return;
+      }
+
       await _firebaseSyncService.replaceLocalWithFirestore();
       await _loadInitialData();
       await _initializeAuthGate();
@@ -94,6 +127,86 @@ class _InventoryAppState extends State<InventoryApp> {
             'Unable to load online data from Firebase. Please check your internet or Firebase setup and retry.';
       });
     }
+  }
+
+  Future<void> _openUpdateLink(String? url) async {
+    final normalized = (url ?? '').trim();
+    if (normalized.isEmpty || !mounted) {
+      return;
+    }
+
+    if (Platform.isAndroid) {
+      setState(() {
+        _isUpdatingApk = true;
+        _updateStatusMessage = 'Preparing update...';
+      });
+
+      try {
+        await _apkUpdateService.downloadAndInstallApk(
+          downloadUrl: normalized,
+          onProgress: (message) {
+            if (!mounted) return;
+            setState(() {
+              _updateStatusMessage = message;
+            });
+          },
+        );
+      } on ApkUpdateException catch (error) {
+        if (!mounted) return;
+        _showSnackMessage(error.message);
+      } catch (_) {
+        if (!mounted) return;
+        _showSnackMessage('Unable to install update in-app.');
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUpdatingApk = false;
+            _updateStatusMessage = null;
+          });
+        }
+      }
+      return;
+    }
+
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) {
+      _showSnackMessage('Update link is invalid.');
+      return;
+    }
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        _showSnackMessage('Unable to open update link.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackMessage('Unable to open update link.');
+    }
+  }
+
+  String _policyTitle(StartupBlockType blockType) {
+    return switch (blockType) {
+      StartupBlockType.maintenance => 'System Maintenance',
+      StartupBlockType.offline => 'System Offline',
+      StartupBlockType.forceUpdate => 'Update Required',
+      StartupBlockType.none => 'Startup',
+    };
+  }
+
+  String _policyMessage(StartupPolicyResult policy) {
+    return switch (policy.blockType) {
+      StartupBlockType.maintenance =>
+        'The system is currently under maintenance. Please try again later.',
+      StartupBlockType.offline =>
+        'The system is currently offline. Please wait until it is online again.',
+      StartupBlockType.forceUpdate =>
+        'A new version is required to continue. Current: ${policy.currentVersion} • Required: ${policy.remoteVersion}.',
+      StartupBlockType.none => '',
+    };
   }
 
   Future<void> _initializeAuthGate() async {
@@ -227,36 +340,159 @@ class _InventoryAppState extends State<InventoryApp> {
 
   @override
   Widget build(BuildContext context) {
-    if (_startupError != null) {
+    final startupPolicy = _startupPolicyResult;
+    if (startupPolicy != null &&
+        startupPolicy.blockType != StartupBlockType.none) {
+      final hasUpdateAction =
+          startupPolicy.blockType == StartupBlockType.forceUpdate;
+      final colorScheme = _themeFromSelection().colorScheme;
+      final iconColor = hasUpdateAction
+          ? colorScheme.primary
+          : colorScheme.error;
       return MaterialApp(
         title: 'bnm',
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
         home: Scaffold(
+          backgroundColor: colorScheme.surface,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: colorScheme.outlineVariant),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasUpdateAction
+                            ? Icons.system_update_alt_outlined
+                            : Icons.pause_circle_outline,
+                        size: 56,
+                        color: iconColor,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _policyTitle(startupPolicy.blockType),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _policyMessage(startupPolicy),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      if (hasUpdateAction)
+                        FilledButton.icon(
+                          onPressed: _isUpdatingApk
+                              ? null
+                              : () => _openUpdateLink(startupPolicy.updateUrl),
+                          icon: _isUpdatingApk
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download_outlined),
+                          label: Text(
+                            _isUpdatingApk ? 'Downloading...' : 'Update Now',
+                          ),
+                        ),
+                      if (hasUpdateAction) const SizedBox(height: 10),
+                      if (hasUpdateAction &&
+                          (_updateStatusMessage ?? '').trim().isNotEmpty)
+                        Text(
+                          _updateStatusMessage!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          textAlign: TextAlign.center,
+                        ),
+                      if (hasUpdateAction &&
+                          (_updateStatusMessage ?? '').trim().isNotEmpty)
+                        const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _bootstrapAppState,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Check Again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_startupError != null) {
+      final colorScheme = _themeFromSelection().colorScheme;
+      return MaterialApp(
+        title: 'bnm',
+        debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+        theme: _themeFromSelection(),
+        home: Scaffold(
+          backgroundColor: colorScheme.surface,
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 520),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.cloud_off_outlined, size: 56),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Online Sync Required',
-                      style: Theme.of(context).textTheme.titleLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(_startupError!, textAlign: TextAlign.center),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: _bootstrapAppState,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                    ),
-                  ],
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: colorScheme.outlineVariant),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.cloud_off_outlined,
+                        size: 56,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Online Sync Required',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSurface,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _startupError!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: _bootstrapAppState,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -269,6 +505,7 @@ class _InventoryAppState extends State<InventoryApp> {
       return MaterialApp(
         title: 'bnm',
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
         home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
@@ -278,6 +515,7 @@ class _InventoryAppState extends State<InventoryApp> {
       return MaterialApp(
         title: 'bnm',
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
         home: LoginPage(
           authService: _firebaseAuthService,
@@ -295,6 +533,7 @@ class _InventoryAppState extends State<InventoryApp> {
     return MaterialApp(
       title: 'bnm',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       theme: _themeFromSelection(),
       home: HomeShell(
         categoryProvider: _categoryProvider,

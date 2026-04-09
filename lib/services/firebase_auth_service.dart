@@ -133,6 +133,69 @@ class FirebaseAuthService {
     return profile;
   }
 
+  Future<void> changePin({
+    required String currentPin,
+    required String newPin,
+  }) async {
+    final normalizedCurrentPin = currentPin.trim();
+    final normalizedNewPin = newPin.trim();
+
+    if (!_isValidPin(normalizedCurrentPin)) {
+      throw const AuthFlowException('Current PIN must be exactly 6 digits.');
+    }
+    if (!_isValidPin(normalizedNewPin)) {
+      throw const AuthFlowException('New PIN must be exactly 6 digits.');
+    }
+    if (normalizedCurrentPin == normalizedNewPin) {
+      throw const AuthFlowException(
+        'New PIN must be different from current PIN.',
+      );
+    }
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFlowException('No signed-in user found.');
+    }
+
+    var authEmail = user.email;
+    if (authEmail == null || authEmail.trim().isEmpty) {
+      final profile = await getProfile(user.uid);
+      authEmail = profile?.authEmail;
+    }
+
+    if (authEmail == null || authEmail.trim().isEmpty) {
+      throw const AuthFlowException('Account email is missing for PIN update.');
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: authEmail.trim(),
+        password: normalizedCurrentPin,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(normalizedNewPin);
+
+      await _users.doc(user.uid).set({
+        'updatedAt': DateTime.now(),
+      }, SetOptions(merge: true));
+    } on FirebaseAuthException catch (error) {
+      switch (error.code) {
+        case 'invalid-credential':
+        case 'wrong-password':
+          throw const AuthFlowException('Current PIN is incorrect.');
+        case 'weak-password':
+          throw const AuthFlowException('New PIN must be exactly 6 digits.');
+        case 'requires-recent-login':
+          throw const AuthFlowException(
+            'Session expired. Please log out and log back in, then try again.',
+          );
+        default:
+          throw AuthFlowException(error.message ?? 'Failed to update PIN.');
+      }
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   bool _isValidPin(String pin) {

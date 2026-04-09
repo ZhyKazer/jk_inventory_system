@@ -144,6 +144,7 @@ class _HomeShellState extends State<HomeShell> {
   bool get _canCreateBatch => widget.currentRole == AppRole.admin;
   bool get _canStartOuting => widget.currentRole != AppRole.view;
   bool get _canRegisterAccount => widget.currentRole == AppRole.admin;
+  bool get _canSeeBackupOptions => widget.currentRole == AppRole.admin;
   bool get _canSyncToFirebase => widget.currentRole == AppRole.admin;
 
   String _roleName() => widget.currentRole.label;
@@ -661,6 +662,17 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
+  Future<void> _openChangePasswordDialog() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _ChangePasswordDialog(authService: _firebaseAuthService),
+    );
+
+    if (changed == true) {
+      _showMessage('PIN changed successfully.');
+    }
+  }
+
   Future<void> _onLogout() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -961,29 +973,38 @@ class _HomeShellState extends State<HomeShell> {
                 onTap: _onLogout,
               ),
               ListTile(
-                leading: const Icon(Icons.person_add_alt_1_outlined),
-                title: const Text('Register Account'),
-                subtitle: const Text(
-                  'Create a new View, Moderator, or Admin account.',
-                ),
-                onTap: _canRegisterAccount ? _openRegisterAccount : null,
+                leading: const Icon(Icons.lock_reset_outlined),
+                title: const Text('Change Password'),
+                subtitle: const Text('Change your current 6-digit PIN.'),
+                onTap: _openChangePasswordDialog,
               ),
-              ListTile(
-                leading: const Icon(Icons.backup_table_outlined),
-                title: const Text('Backup Options'),
-                subtitle: const Text(
-                  'Backup, restore, import, and change backup folder.',
+              if (_canRegisterAccount)
+                ListTile(
+                  leading: const Icon(Icons.person_add_alt_1_outlined),
+                  title: const Text('Register Account'),
+                  subtitle: const Text(
+                    'Create a new View, Moderator, or Admin account.',
+                  ),
+                  onTap: _openRegisterAccount,
                 ),
-                onTap: _openBackupOptions,
-              ),
-              ListTile(
-                leading: const Icon(Icons.cloud_upload_outlined),
-                title: const Text('Sync Local to Firebase'),
-                subtitle: const Text(
-                  'Manually force-push local backup cache to Firebase.',
+              if (_canSeeBackupOptions)
+                ListTile(
+                  leading: const Icon(Icons.backup_table_outlined),
+                  title: const Text('Backup Options'),
+                  subtitle: const Text(
+                    'Backup, restore, import, and change backup folder.',
+                  ),
+                  onTap: _openBackupOptions,
                 ),
-                onTap: _canSyncToFirebase ? _onSyncLocalToFirebase : null,
-              ),
+              if (_canSyncToFirebase)
+                ListTile(
+                  leading: const Icon(Icons.cloud_upload_outlined),
+                  title: const Text('Sync Local to Firebase'),
+                  subtitle: const Text(
+                    'Manually force-push local backup cache to Firebase.',
+                  ),
+                  onTap: _onSyncLocalToFirebase,
+                ),
             ],
           ),
         ),
@@ -1075,6 +1096,149 @@ class _HelpStep {
   final String title;
   final String message;
   final IconData icon;
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.authService});
+
+  final FirebaseAuthService authService;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final TextEditingController _currentPinController = TextEditingController();
+  final TextEditingController _newPinController = TextEditingController();
+  final TextEditingController _confirmPinController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _currentPinController.dispose();
+    _newPinController.dispose();
+    _confirmPinController.dispose();
+    super.dispose();
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _submit() async {
+    final currentPin = _currentPinController.text.trim();
+    final newPin = _newPinController.text.trim();
+    final confirmPin = _confirmPinController.text.trim();
+
+    if (currentPin.length != 6 || int.tryParse(currentPin) == null) {
+      _showSnack('Current PIN must be exactly 6 digits.');
+      return;
+    }
+
+    if (newPin.length != 6 || int.tryParse(newPin) == null) {
+      _showSnack('New PIN must be exactly 6 digits.');
+      return;
+    }
+
+    if (newPin != confirmPin) {
+      _showSnack('PIN confirmation does not match.');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+    });
+
+    try {
+      await widget.authService.changePin(
+        currentPin: currentPin,
+        newPin: newPin,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on AuthFlowException catch (error) {
+      if (!mounted) return;
+      _showSnack(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Failed to change PIN.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change Password'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _currentPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Current PIN',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _newPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'New PIN',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Confirm New PIN',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Change'),
+        ),
+      ],
+    );
+  }
 }
 
 class _AnchoredHelpOverlay extends StatelessWidget {

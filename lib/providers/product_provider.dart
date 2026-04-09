@@ -253,6 +253,55 @@ class ProductProvider extends ChangeNotifier {
     await load();
   }
 
+  Future<void> restorePricesFromBatches(List<StockBatch> batches) async {
+    if (batches.isEmpty || _items.isEmpty) return;
+
+    final latestByProduct = <String, ({DateTime createdAt, BatchItem item})>{};
+
+    for (final batch in batches) {
+      for (final item in batch.items) {
+        if (item.originalPrice <= 0 && item.sellingPrice <= 0) {
+          continue;
+        }
+
+        final existing = latestByProduct[item.productId];
+        if (existing == null || batch.createdAt.isAfter(existing.createdAt)) {
+          latestByProduct[item.productId] = (createdAt: batch.createdAt, item: item);
+        }
+      }
+    }
+
+    if (latestByProduct.isEmpty) return;
+
+    var hasChanges = false;
+    for (final product in _items) {
+      final latest = latestByProduct[product.id];
+      if (latest == null) continue;
+
+      final shouldRestoreCost = product.costPrice <= 0 && latest.item.originalPrice > 0;
+      final shouldRestoreSelling =
+          product.sellingPrice <= 0 && latest.item.sellingPrice > 0;
+
+      if (!shouldRestoreCost && !shouldRestoreSelling) {
+        continue;
+      }
+
+      final updated = product.copyWith(
+        costPrice: shouldRestoreCost ? latest.item.originalPrice : product.costPrice,
+        sellingPrice:
+            shouldRestoreSelling ? latest.item.sellingPrice : product.sellingPrice,
+        updatedAt: DateTime.now(),
+      );
+
+      await _repository.update(updated);
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      await load();
+    }
+  }
+
   Future<void> delete(String id) async {
     final product = _items.firstWhere((item) => item.id == id);
     await _repository.delete(id);

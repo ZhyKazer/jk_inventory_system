@@ -47,11 +47,16 @@ class _InventoryAppState extends State<InventoryApp> {
       _activityLogProvider,
     );
 
-    _activityLogProvider.load();
-    _categoryProvider.load();
-    _productProvider.load();
-    _stockBatchProvider.load();
-    _outingProvider.load();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await _activityLogProvider.load();
+    await _categoryProvider.load();
+    await _productProvider.load();
+    await _stockBatchProvider.load();
+    await _productProvider.restorePricesFromBatches(_stockBatchProvider.items);
+    await _outingProvider.load();
   }
 
   void _setTheme(AppThemeOption theme) {

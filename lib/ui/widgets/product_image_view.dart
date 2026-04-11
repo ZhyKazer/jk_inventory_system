@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/services/product_image_cache_service.dart';
 
@@ -67,15 +68,27 @@ class _ProductImageViewState extends State<ProductImageView> {
         }
 
         final resolvedPath = snapshot.data;
+        if (snapshot.hasError) {
+          debugPrint(
+            'ProductImageView failed to resolve image path: ${snapshot.error}',
+          );
+          return _placeholder(context, widget.errorIcon);
+        }
+
         if (resolvedPath == null || resolvedPath.isEmpty) {
           return _placeholder(context, widget.errorIcon);
         }
 
-        return Image.file(
-          File(resolvedPath),
-          fit: widget.fit,
-          errorBuilder: (_, _, _) => _placeholder(context, widget.errorIcon),
-        );
+        try {
+          return Image.file(
+            File(resolvedPath),
+            fit: widget.fit,
+            errorBuilder: (_, _, _) => _placeholder(context, widget.errorIcon),
+          );
+        } catch (error) {
+          debugPrint('ProductImageView failed to render image file: $error');
+          return _placeholder(context, widget.errorIcon);
+        }
       },
     );
   }

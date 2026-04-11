@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/firebase_options.dart';
 import 'package:jk_inventory_system/models/app_user_profile.dart';
@@ -24,8 +27,36 @@ import 'package:url_launcher/url_launcher.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  _configureFirebaseTargets();
   await InventoryStorage.initialize();
   runApp(const InventoryApp());
+}
+
+const bool _useFirebaseEmulators = bool.fromEnvironment(
+  'USE_FIREBASE_EMULATORS',
+  defaultValue: false,
+);
+const bool _disableLoginGate = bool.fromEnvironment(
+  'DISABLE_LOGIN_GATE',
+  defaultValue: false,
+);
+const String _firebaseEmulatorHostOverride = String.fromEnvironment(
+  'FIREBASE_EMULATOR_HOST',
+  defaultValue: '',
+);
+
+void _configureFirebaseTargets() {
+  if (!_useFirebaseEmulators) {
+    return;
+  }
+
+  final emulatorHost = _firebaseEmulatorHostOverride.trim().isNotEmpty
+      ? _firebaseEmulatorHostOverride.trim()
+      : (Platform.isAndroid ? '10.0.2.2' : '127.0.0.1');
+
+  FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
+  FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8085);
+  FirebaseStorage.instance.useStorageEmulator(emulatorHost, 9199);
 }
 
 class InventoryApp extends StatefulWidget {
@@ -210,6 +241,17 @@ class _InventoryAppState extends State<InventoryApp> {
   }
 
   Future<void> _initializeAuthGate() async {
+    if (_disableLoginGate) {
+      if (!mounted) return;
+      setState(() {
+        _rememberedUsername = 'dev-admin';
+        _authReady = true;
+        _isLoggedIn = true;
+        _currentRole = AppRole.admin;
+      });
+      return;
+    }
+
     _rememberedUsername = _authSessionService.getRememberedUsername();
     await _firebaseAuthService.signOut();
     if (!mounted) return;

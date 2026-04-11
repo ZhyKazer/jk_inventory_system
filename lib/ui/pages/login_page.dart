@@ -14,7 +14,7 @@ class LoginPage extends StatefulWidget {
   final FirebaseAuthService authService;
   final String? rememberedUsername;
   final bool showAppBar;
-  final ValueChanged<AppUserProfile>? onLoginSuccess;
+  final Future<void> Function(AppUserProfile)? onLoginSuccess;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -73,7 +73,9 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         _signedInProfile = profile;
       });
-      widget.onLoginSuccess?.call(profile);
+      if (widget.onLoginSuccess != null) {
+        await widget.onLoginSuccess!(profile);
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

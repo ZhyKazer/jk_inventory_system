@@ -1,1 +1,46 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"bnm-inventory","appId":"1:702685581328:android:1f0d492164ce5308a07a95","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"bnm-inventory","configurations":{"android":"1:702685581328:android:1f0d492164ce5308a07a95","ios":"1:702685581328:ios:b3776a0cd60efe5ba07a95","macos":"1:702685581328:ios:e7aacaa27f6b7fe7a07a95","web":"1:702685581328:web:6e039665e19d9241a07a95","windows":"1:702685581328:web:f0b9f8c654a1ae5aa07a95"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "bnm-inventory",
+          "appId": "1:702685581328:android:1f0d492164ce5308a07a95",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "bnm-inventory",
+          "configurations": {
+            "android": "1:702685581328:android:1f0d492164ce5308a07a95",
+            "ios": "1:702685581328:ios:b3776a0cd60efe5ba07a95",
+            "macos": "1:702685581328:ios:e7aacaa27f6b7fe7a07a95",
+            "web": "1:702685581328:web:6e039665e19d9241a07a95",
+            "windows": "1:702685581328:web:f0b9f8c654a1ae5aa07a95"
+          }
+        }
+      }
+    }
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8085
+    },
+    "storage": {
+      "port": 9199
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
+  }
+}

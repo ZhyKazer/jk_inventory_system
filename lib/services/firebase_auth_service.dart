@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:jk_inventory_system/firebase_options.dart';
 import 'package:jk_inventory_system/models/app_user_profile.dart';
+import 'package:http/http.dart' as http;
 
 class FirebaseAuthService {
   FirebaseAuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
@@ -11,6 +15,10 @@ class FirebaseAuthService {
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  static const bool _useFirebaseEmulators = bool.fromEnvironment(
+    'USE_FIREBASE_EMULATORS',
+    defaultValue: false,
+  );
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
@@ -42,12 +50,22 @@ class FirebaseAuthService {
       throw const AuthFlowException('Account is not configured for sign-in.');
     }
 
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: pin,
-    );
+    final String uid;
+    if (Platform.isWindows && !_useFirebaseEmulators) {
+      uid = await _signInWithRest(email: email, pin: pin);
+    } else {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: pin,
+      );
+      final resolvedUid = credential.user?.uid;
+      if (resolvedUid == null || resolvedUid.isEmpty) {
+        throw const AuthFlowException('Account profile is missing.');
+      }
+      uid = resolvedUid;
+    }
 
-    final profile = await getProfile(credential.user?.uid);
+    final profile = await getProfile(uid);
     if (profile == null) {
       throw const AuthFlowException('Account profile is missing.');
     }
@@ -196,7 +214,69 @@ class FirebaseAuthService {
     }
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    if (Platform.isWindows && !_useFirebaseEmulators) {
+      return;
+    }
+    await _auth.signOut();
+  }
+
+  Future<String> _signInWithRest({
+    required String email,
+    required String pin,
+  }) async {
+    final apiKey = DefaultFirebaseOptions.currentPlatform.apiKey;
+    final uri = Uri.parse(
+      'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey',
+    );
+
+    try {
+      final response = await http
+          .post(
+            uri,
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email,
+              'password': pin,
+              'returnSecureToken': true,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic>) {
+          final uid = body['localId'];
+          if (uid is String && uid.isNotEmpty) {
+            return uid;
+          }
+        }
+        throw const AuthFlowException('Account profile is missing.');
+      }
+
+      final body = jsonDecode(response.body);
+      if (body is Map<String, dynamic>) {
+        final error = body['error'];
+        if (error is Map<String, dynamic>) {
+          final message = error['message'];
+          if (message is String) {
+            throw AuthFlowException(_mapRestAuthError(message));
+          }
+        }
+      }
+      throw const AuthFlowException('Login failed. Please try again.');
+    } on AuthFlowException {
+      rethrow;
+    } on SocketException {
+      throw const AuthFlowException('No internet connection.');
+    } on http.ClientException {
+      throw const AuthFlowException('Unable to contact authentication server.');
+    } on FormatException {
+      throw const AuthFlowException('Unexpected authentication response.');
+    } catch (_) {
+      throw const AuthFlowException('Login failed. Please try again.');
+    }
+  }
 
   bool _isValidPin(String pin) {
     final trimmed = pin.trim();
@@ -221,6 +301,21 @@ class FirebaseAuthService {
         return 'Generated auth email is invalid.';
       default:
         return error.message ?? 'Authentication error.';
+    }
+  }
+
+  String _mapRestAuthError(String code) {
+    switch (code) {
+      case 'INVALID_LOGIN_CREDENTIALS':
+      case 'INVALID_PASSWORD':
+      case 'EMAIL_NOT_FOUND':
+        return 'Invalid username or PIN.';
+      case 'USER_DISABLED':
+        return 'This account has been disabled.';
+      case 'TOO_MANY_ATTEMPTS_TRY_LATER':
+        return 'Too many attempts. Please try again later.';
+      default:
+        return 'Login failed. Please try again.';
     }
   }
 }

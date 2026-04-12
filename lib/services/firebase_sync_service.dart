@@ -7,6 +7,7 @@ import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/services/inventory_storage.dart';
@@ -17,6 +18,7 @@ class FirebaseSyncSummary {
     required this.products,
     required this.stockBatches,
     required this.outings,
+    required this.soldSessions,
     required this.activities,
   });
 
@@ -24,9 +26,16 @@ class FirebaseSyncSummary {
   final int products;
   final int stockBatches;
   final int outings;
+  final int soldSessions;
   final int activities;
 
-  int get total => categories + products + stockBatches + outings + activities;
+  int get total =>
+      categories +
+      products +
+      stockBatches +
+      outings +
+      soldSessions +
+      activities;
 }
 
 class FirebaseSyncService {
@@ -58,6 +67,11 @@ class FirebaseSyncService {
     onProgress?.call('Fetching outings from Firebase...');
     final outingsSnapshot = await _firestore.collection('outings').get();
 
+    onProgress?.call('Fetching sold sessions from Firebase...');
+    final soldSessionsSnapshot = await _firestore
+        .collection('soldSessions')
+        .get();
+
     onProgress?.call('Fetching activities from Firebase...');
     final activitiesSnapshot = await _firestore.collection('activities').get();
 
@@ -77,6 +91,10 @@ class FirebaseSyncService {
         .map((doc) => _outingFromMap(doc.data()))
         .whereType<OutingRecord>()
         .toList(growable: false);
+    final soldSessions = soldSessionsSnapshot.docs
+        .map((doc) => _soldSessionFromMap(doc.data()))
+        .whereType<SoldSession>()
+        .toList(growable: false);
     final activities = activitiesSnapshot.docs
         .map((doc) => _activityFromMap(doc.data()))
         .whereType<ActivityLog>()
@@ -91,6 +109,9 @@ class FirebaseSyncService {
       InventoryStorage.stockBatchesBoxName,
     );
     final outingsBox = Hive.box<OutingRecord>(InventoryStorage.outingsBoxName);
+    final soldSessionsBox = Hive.box<SoldSession>(
+      InventoryStorage.soldSessionsBoxName,
+    );
     final activitiesBox = Hive.box<ActivityLog>(
       InventoryStorage.activityLogsBoxName,
     );
@@ -99,6 +120,7 @@ class FirebaseSyncService {
     await productsBox.clear();
     await stockBatchesBox.clear();
     await outingsBox.clear();
+    await soldSessionsBox.clear();
     await activitiesBox.clear();
 
     await categoriesBox.putAll({for (final item in categories) item.id: item});
@@ -107,6 +129,9 @@ class FirebaseSyncService {
       for (final item in stockBatches) item.id: item,
     });
     await outingsBox.putAll({for (final item in outings) item.id: item});
+    await soldSessionsBox.putAll({
+      for (final item in soldSessions) item.id: item,
+    });
     await activitiesBox.putAll({for (final item in activities) item.id: item});
 
     return FirebaseSyncSummary(
@@ -114,6 +139,7 @@ class FirebaseSyncService {
       products: products.length,
       stockBatches: stockBatches.length,
       outings: outings.length,
+      soldSessions: soldSessions.length,
       activities: activities.length,
     );
   }
@@ -155,6 +181,13 @@ class FirebaseSyncService {
         .set(_outingToMap(outing), SetOptions(merge: true));
   }
 
+  Future<void> upsertSoldSession(SoldSession session) async {
+    await _firestore
+        .collection('soldSessions')
+        .doc(session.id)
+        .set(_soldSessionToMap(session), SetOptions(merge: true));
+  }
+
   Future<void> upsertActivity(ActivityLog activity) async {
     await _firestore
         .collection('activities')
@@ -177,6 +210,9 @@ class FirebaseSyncService {
     ).values.toList(growable: false);
     final outings = Hive.box<OutingRecord>(
       InventoryStorage.outingsBoxName,
+    ).values.toList(growable: false);
+    final soldSessions = Hive.box<SoldSession>(
+      InventoryStorage.soldSessionsBoxName,
     ).values.toList(growable: false);
     final activities = Hive.box<ActivityLog>(
       InventoryStorage.activityLogsBoxName,
@@ -228,6 +264,16 @@ class FirebaseSyncService {
       );
     }
 
+    onProgress?.call('Preparing sold sessions...');
+    for (final session in soldSessions) {
+      writes.add(
+        _SyncWrite(
+          ref: _firestore.collection('soldSessions').doc(session.id),
+          data: _soldSessionToMap(session),
+        ),
+      );
+    }
+
     onProgress?.call('Preparing activity logs...');
     for (final activity in activities) {
       writes.add(
@@ -262,6 +308,10 @@ class FirebaseSyncService {
         localIds: outings.map((item) => item.id).toSet(),
       );
       await _deleteMissingRemoteDocuments(
+        collectionPath: 'soldSessions',
+        localIds: soldSessions.map((item) => item.id).toSet(),
+      );
+      await _deleteMissingRemoteDocuments(
         collectionPath: 'activities',
         localIds: activities.map((item) => item.id).toSet(),
       );
@@ -272,6 +322,7 @@ class FirebaseSyncService {
       products: products.length,
       stockBatches: stockBatches.length,
       outings: outings.length,
+      soldSessions: soldSessions.length,
       activities: activities.length,
     );
   }
@@ -472,6 +523,26 @@ class FirebaseSyncService {
     };
   }
 
+  Map<String, dynamic> _soldSessionToMap(SoldSession session) {
+    return {
+      'id': session.id,
+      'username': session.username,
+      'actorUid': session.actorUid,
+      'createdAt': session.createdAt,
+      'status': session.status.name,
+      'lines': [
+        for (final line in session.lines)
+          {
+            'productId': line.productId,
+            'productName': line.productName,
+            'quantity': line.quantity,
+            'gcashReceiptImagePath': line.gcashReceiptImagePath,
+            'shopeeCheckoutImagePath': line.shopeeCheckoutImagePath,
+          },
+      ],
+    };
+  }
+
   Category? _categoryFromMap(Map<String, dynamic> map) {
     final id = _asString(map['id']);
     final name = _asString(map['name']);
@@ -611,6 +682,47 @@ class FirebaseSyncService {
     );
   }
 
+  SoldSession? _soldSessionFromMap(Map<String, dynamic> map) {
+    final id = _asString(map['id']);
+    final username = _asString(map['username']);
+    final linesRaw = map['lines'];
+    if (id == null || username == null || linesRaw is! List) {
+      return null;
+    }
+
+    final lines = <SoldProductLine>[];
+    for (final entry in linesRaw) {
+      if (entry is! Map<String, dynamic>) {
+        continue;
+      }
+      final productId = _asString(entry['productId']);
+      final productName = _asString(entry['productName']);
+      final quantity = _asDouble(entry['quantity']);
+      if (productId == null || productName == null || quantity == null) {
+        continue;
+      }
+
+      lines.add(
+        SoldProductLine(
+          productId: productId,
+          productName: productName,
+          quantity: quantity,
+          gcashReceiptImagePath: _asString(entry['gcashReceiptImagePath']),
+          shopeeCheckoutImagePath: _asString(entry['shopeeCheckoutImagePath']),
+        ),
+      );
+    }
+
+    return SoldSession(
+      id: id,
+      username: username,
+      actorUid: _asString(map['actorUid']),
+      createdAt: _asDateTime(map['createdAt']) ?? DateTime.now(),
+      lines: lines,
+      status: _soldSessionStatusFromName(_asString(map['status'])),
+    );
+  }
+
   List<OutingLine> _parseOutingLines(dynamic value) {
     if (value is! List) {
       return const [];
@@ -704,6 +816,16 @@ class FirebaseSyncService {
     return ActivityActionType.values.firstWhere(
       (type) => type.name == value,
       orElse: () => ActivityActionType.productUpdated,
+    );
+  }
+
+  SoldSessionStatus _soldSessionStatusFromName(String? value) {
+    if (value == null) {
+      return SoldSessionStatus.pendingReview;
+    }
+    return SoldSessionStatus.values.firstWhere(
+      (status) => status.name == value,
+      orElse: () => SoldSessionStatus.pendingReview,
     );
   }
 }

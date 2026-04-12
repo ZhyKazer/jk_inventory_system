@@ -3,6 +3,7 @@ import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/repositories/category_repository.dart';
 import 'package:jk_inventory_system/repositories/product_repository.dart';
@@ -10,6 +11,7 @@ import 'package:jk_inventory_system/repositories/stock_batch_repository.dart';
 import 'package:jk_inventory_system/repositories/outing_repository.dart';
 import 'package:jk_inventory_system/repositories/activity_log_repository.dart';
 import 'package:jk_inventory_system/repositories/inventory_repo_interfaces.dart';
+import 'package:jk_inventory_system/repositories/sold_session_repository.dart';
 
 class InventoryStorage {
   static const categoriesBoxName = 'categories';
@@ -17,6 +19,7 @@ class InventoryStorage {
   static const stockBatchesBoxName = 'stock_batches';
   static const outingsBoxName = 'outings';
   static const activityLogsBoxName = 'activity_logs';
+  static const soldSessionsBoxName = 'sold_sessions';
   static const authSessionBoxName = 'auth_session';
 
   static Future<void> initialize() async {
@@ -37,12 +40,16 @@ class InventoryStorage {
     if (!Hive.isAdapterRegistered(4)) {
       Hive.registerAdapter(ActivityLogAdapter());
     }
+    if (!Hive.isAdapterRegistered(5)) {
+      Hive.registerAdapter(SoldSessionAdapter());
+    }
 
     await Hive.openBox<Category>(categoriesBoxName);
     await Hive.openBox<Product>(productsBoxName);
     await Hive.openBox<StockBatch>(stockBatchesBoxName);
     await Hive.openBox<OutingRecord>(outingsBoxName);
     await Hive.openBox<ActivityLog>(activityLogsBoxName);
+    await Hive.openBox<SoldSession>(soldSessionsBoxName);
     await Hive.openBox<dynamic>(authSessionBoxName);
   }
 
@@ -54,6 +61,7 @@ class InventoryStorage {
     final batchesBox = Hive.box<StockBatch>(stockBatchesBoxName);
     final outingsBox = Hive.box<OutingRecord>(outingsBoxName);
     final activityLogsBox = Hive.box<ActivityLog>(activityLogsBoxName);
+    final soldSessionsBox = Hive.box<SoldSession>(soldSessionsBoxName);
 
     return _LocalInventoryRepoImpl(
       products: ProductRepository(productsBox),
@@ -61,6 +69,7 @@ class InventoryStorage {
       stockBatches: StockBatchRepository(batchesBox),
       outings: OutingRepository(outingsBox),
       activityLogs: ActivityLogRepository(activityLogsBox),
+      soldSessions: SoldSessionRepository(soldSessionsBox),
     );
   }
 }
@@ -72,6 +81,7 @@ class _LocalInventoryRepoImpl implements LocalInventoryRepo {
     required this.stockBatches,
     required this.outings,
     required this.activityLogs,
+    required this.soldSessions,
   });
 
   @override
@@ -88,4 +98,7 @@ class _LocalInventoryRepoImpl implements LocalInventoryRepo {
 
   @override
   final ActivityLogRepositoryInterface activityLogs;
+
+  @override
+  final SoldSessionRepositoryInterface soldSessions;
 }

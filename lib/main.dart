@@ -12,6 +12,7 @@ import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/providers/sold_session_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/services/auth_session_service.dart';
 import 'package:jk_inventory_system/services/apk_update_service.dart';
@@ -72,6 +73,7 @@ class _InventoryAppState extends State<InventoryApp> {
   late final ProductProvider _productProvider;
   late final StockBatchProvider _stockBatchProvider;
   late final OutingProvider _outingProvider;
+  late final SoldSessionProvider _soldSessionProvider;
   AppThemeOption _selectedTheme = AppThemeOption.dark;
   Color _customThemeColor = Colors.deepPurple;
   final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
@@ -116,6 +118,7 @@ class _InventoryAppState extends State<InventoryApp> {
       () => _productProvider.items,
       _activityLogProvider,
     );
+    _soldSessionProvider = SoldSessionProvider(repo.soldSessions);
 
     _bootstrapAppState();
   }
@@ -289,6 +292,7 @@ class _InventoryAppState extends State<InventoryApp> {
     await _stockBatchProvider.load();
     await _productProvider.restorePricesFromBatches(_stockBatchProvider.items);
     await _outingProvider.load();
+    await _soldSessionProvider.load();
   }
 
   void _setTheme(AppThemeOption theme) {
@@ -582,6 +586,7 @@ class _InventoryAppState extends State<InventoryApp> {
         productProvider: _productProvider,
         stockBatchProvider: _stockBatchProvider,
         outingProvider: _outingProvider,
+        soldSessionProvider: _soldSessionProvider,
         activityLogProvider: _activityLogProvider,
         selectedTheme: _selectedTheme,
         onThemeSelected: _setTheme,

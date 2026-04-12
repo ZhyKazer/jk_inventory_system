@@ -3,6 +3,7 @@ import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/activity_log.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 
 abstract class ProductRepositoryInterface {
   List<Product> getAll();
@@ -33,6 +34,12 @@ abstract class ActivityLogRepositoryInterface {
   Future<void> create(ActivityLog activityLog);
 }
 
+abstract class SoldSessionRepositoryInterface {
+  List<SoldSession> getAll();
+  Future<void> create(SoldSession session);
+  Future<void> update(SoldSession session);
+}
+
 /// High-level local inventory facade to allow swapping implementations later.
 abstract class LocalInventoryRepo {
   ProductRepositoryInterface get products;
@@ -40,6 +47,7 @@ abstract class LocalInventoryRepo {
   StockBatchRepositoryInterface get stockBatches;
   OutingRepositoryInterface get outings;
   ActivityLogRepositoryInterface get activityLogs;
+  SoldSessionRepositoryInterface get soldSessions;
 }
 
 /// Cloud counterpart placeholder for future Firebase implementation.

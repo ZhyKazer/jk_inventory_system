@@ -6,6 +6,7 @@ import 'package:jk_inventory_system/providers/activity_log_provider.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/providers/sold_session_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
 import 'package:jk_inventory_system/services/backup_service.dart';
 import 'package:jk_inventory_system/services/firebase_auth_service.dart';
@@ -18,6 +19,8 @@ import 'package:jk_inventory_system/ui/pages/create_batch_page.dart';
 import 'package:jk_inventory_system/ui/pages/outing_stepper_page.dart';
 import 'package:jk_inventory_system/ui/pages/products_page.dart';
 import 'package:jk_inventory_system/ui/pages/register_account_page.dart';
+import 'package:jk_inventory_system/ui/pages/review_purchase_page.dart';
+import 'package:jk_inventory_system/ui/pages/sold_flow_stepper_page.dart';
 import 'package:jk_inventory_system/ui/theme/app_theme_option.dart';
 import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
@@ -30,6 +33,7 @@ class HomeShell extends StatefulWidget {
     required this.productProvider,
     required this.stockBatchProvider,
     required this.outingProvider,
+    required this.soldSessionProvider,
     required this.activityLogProvider,
     required this.selectedTheme,
     required this.onThemeSelected,
@@ -45,6 +49,7 @@ class HomeShell extends StatefulWidget {
   final ProductProvider productProvider;
   final StockBatchProvider stockBatchProvider;
   final OutingProvider outingProvider;
+  final SoldSessionProvider soldSessionProvider;
   final AppThemeOption selectedTheme;
   final ValueChanged<AppThemeOption> onThemeSelected;
   final Color selectedCustomThemeColor;
@@ -69,12 +74,14 @@ class _HomeShellState extends State<HomeShell> {
   final GlobalKey _addCategoryFabKey = GlobalKey();
   final GlobalKey _addBatchFabKey = GlobalKey();
   final GlobalKey _outingFlowFabKey = GlobalKey();
+  final GlobalKey _soldFlowFabKey = GlobalKey();
   final GlobalKey _manageCategoriesFabKey = GlobalKey();
   final GlobalKey _helpFabKey = GlobalKey();
   final GlobalKey _productsNavKey = GlobalKey();
   final GlobalKey _batchesNavKey = GlobalKey();
   final GlobalKey _activityNavKey = GlobalKey();
   final GlobalKey _analyticsNavKey = GlobalKey();
+  final GlobalKey _reviewPurchaseNavKey = GlobalKey();
 
   final List<_HelpStep> _helpSteps = const [
     _HelpStep(
@@ -106,6 +113,12 @@ class _HomeShellState extends State<HomeShell> {
       message:
           'Start Outing Flow guides you when recording released, sold, and discarded items.',
       icon: Icons.format_list_numbered_rtl_outlined,
+    ),
+    _HelpStep(
+      title: 'Start Sold Flow',
+      message:
+          'Start Sold Flow records sold products with GCash and Shopee screenshot proof.',
+      icon: Icons.point_of_sale_outlined,
     ),
     _HelpStep(
       title: 'Manage Categories',
@@ -143,6 +156,7 @@ class _HomeShellState extends State<HomeShell> {
   bool get _canMutateCategory => widget.currentRole == AppRole.admin;
   bool get _canCreateBatch => widget.currentRole == AppRole.admin;
   bool get _canStartOuting => widget.currentRole != AppRole.view;
+  bool get _canStartSold => widget.currentRole != AppRole.view;
   bool get _canRegisterAccount => widget.currentRole == AppRole.admin;
   bool get _canSeeBackupOptions => widget.currentRole == AppRole.admin;
   bool get _canSyncToFirebase => widget.currentRole == AppRole.admin;
@@ -219,6 +233,27 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  Future<void> _onStartSoldFlow() async {
+    if (!_canStartSold) {
+      _showMessage('${_roleName()} role cannot start sold flow.');
+      return;
+    }
+    setState(() => _actionsFabExpanded = false);
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => SoldFlowStepperPage(
+          soldSessionProvider: widget.soldSessionProvider,
+          productProvider: widget.productProvider,
+          currentUsername: (widget.rememberedUsername ?? '').trim(),
+        ),
+      ),
+    );
+
+    if (submitted == true) {
+      await widget.soldSessionProvider.load();
+    }
+  }
+
   Future<void> _onManageCategories() async {
     setState(() => _actionsFabExpanded = false);
     await Navigator.of(context).push(
@@ -245,11 +280,12 @@ class _HomeShellState extends State<HomeShell> {
       (_helpSteps[2], _addCategoryFabKey),
       (_helpSteps[3], _addBatchFabKey),
       (_helpSteps[4], _outingFlowFabKey),
-      (_helpSteps[5], _manageCategoriesFabKey),
-      (_helpSteps[6], _helpFabKey),
-      (_helpSteps[7], _productsNavKey),
-      (_helpSteps[8], _batchesNavKey),
-      (_helpSteps[9], _activityNavKey),
+      (_helpSteps[5], _soldFlowFabKey),
+      (_helpSteps[6], _manageCategoriesFabKey),
+      (_helpSteps[7], _helpFabKey),
+      (_helpSteps[8], _productsNavKey),
+      (_helpSteps[9], _batchesNavKey),
+      (_helpSteps[10], _activityNavKey),
     ];
 
     for (var index = 0; index < steps.length; index++) {
@@ -322,6 +358,7 @@ class _HomeShellState extends State<HomeShell> {
     await widget.productProvider.load();
     await widget.stockBatchProvider.load();
     await widget.outingProvider.load();
+    await widget.soldSessionProvider.load();
   }
 
   Future<bool> _confirmRestore({required String sourceLabel}) async {
@@ -632,6 +669,7 @@ class _HomeShellState extends State<HomeShell> {
               Text('Products: ${summary.products}'),
               Text('Stock batches: ${summary.stockBatches}'),
               Text('Outings: ${summary.outings}'),
+              Text('Sold Sessions: ${summary.soldSessions}'),
               Text('Activities: ${summary.activities}'),
             ],
           ),
@@ -747,6 +785,14 @@ class _HomeShellState extends State<HomeShell> {
           icon: const Icon(Icons.settings_backup_restore_outlined),
           label: const Text('Add Stock Batch'),
         ),
+      if (_canMutateCategory)
+        FloatingActionButton.extended(
+          key: _manageCategoriesFabKey,
+          heroTag: 'manageCategoriesFab',
+          onPressed: _onManageCategories,
+          icon: const Icon(Icons.list_alt_outlined),
+          label: const Text('Manage Categories'),
+        ),
       if (_canStartOuting)
         FloatingActionButton.extended(
           key: _outingFlowFabKey,
@@ -755,13 +801,13 @@ class _HomeShellState extends State<HomeShell> {
           icon: const Icon(Icons.format_list_numbered_rtl_outlined),
           label: const Text('Start Outing Flow'),
         ),
-      if (_canMutateCategory)
+      if (_canStartSold)
         FloatingActionButton.extended(
-          key: _manageCategoriesFabKey,
-          heroTag: 'manageCategoriesFab',
-          onPressed: _onManageCategories,
-          icon: const Icon(Icons.list_alt_outlined),
-          label: const Text('Manage Categories'),
+          key: _soldFlowFabKey,
+          heroTag: 'soldFlowFab',
+          onPressed: _onStartSoldFlow,
+          icon: const Icon(Icons.point_of_sale_outlined),
+          label: const Text('Sold Flow'),
         ),
       FloatingActionButton.extended(
         key: _helpFabKey,
@@ -818,6 +864,8 @@ class _HomeShellState extends State<HomeShell> {
         productProvider: widget.productProvider,
         outingProvider: widget.outingProvider,
       ),
+      if (widget.currentRole == AppRole.admin)
+        ReviewPurchasePage(soldSessionProvider: widget.soldSessionProvider),
     ];
 
     final titles = [
@@ -825,6 +873,7 @@ class _HomeShellState extends State<HomeShell> {
       'Batch List & History',
       'Activity Log',
       'Analytics',
+      if (widget.currentRole == AppRole.admin) 'Review Purchase',
     ];
 
     String themeLabel(AppThemeOption option) {
@@ -1054,6 +1103,14 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.bar_chart_outlined, key: _analyticsNavKey),
             label: 'Analytics',
           ),
+          if (widget.currentRole == AppRole.admin)
+            NavigationDestination(
+              icon: Icon(
+                Icons.shopping_bag_outlined,
+                key: _reviewPurchaseNavKey,
+              ),
+              label: 'Review',
+            ),
         ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,

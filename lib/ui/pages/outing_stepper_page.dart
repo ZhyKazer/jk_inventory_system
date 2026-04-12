@@ -12,6 +12,7 @@ import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart' as color_utils;
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:path_provider/path_provider.dart';
 
 class OutingStepperPage extends StatefulWidget {
@@ -82,7 +83,11 @@ class _OutingStepperPageState extends State<OutingStepperPage> {
 
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
-    final error = await widget.outingProvider.submitDraft();
+    final error = await AppLoading.run<String?>(
+      context,
+      action: () => widget.outingProvider.submitDraft(),
+      message: 'Submitting outing flow...',
+    );
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 

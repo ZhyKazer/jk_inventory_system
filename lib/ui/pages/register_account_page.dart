@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/models/app_user_profile.dart';
 import 'package:jk_inventory_system/services/firebase_auth_service.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 
 class RegisterAccountPage extends StatefulWidget {
   const RegisterAccountPage({super.key, required this.authService});
@@ -38,10 +39,14 @@ class _RegisterAccountPageState extends State<RegisterAccountPage> {
     });
 
     try {
-      final profile = await widget.authService.registerAccount(
-        username: _usernameController.text,
-        pin: _pinController.text,
-        role: _selectedRole,
+      final profile = await AppLoading.run<AppUserProfile>(
+        context,
+        action: () => widget.authService.registerAccount(
+          username: _usernameController.text,
+          pin: _pinController.text,
+          role: _selectedRole,
+        ),
+        message: 'Creating account...',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

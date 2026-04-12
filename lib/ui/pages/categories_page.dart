@@ -3,6 +3,7 @@ import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/category_form_sheet.dart';
 
 class CategoriesPage extends StatelessWidget {
@@ -63,7 +64,11 @@ class CategoriesPage extends StatelessWidget {
     );
 
     if (shouldDelete == true) {
-      await categoryProvider.delete(category.id);
+      await AppLoading.run<void>(
+        context,
+        action: () => categoryProvider.delete(category.id),
+        message: 'Deleting category...',
+      );
     }
   }
 

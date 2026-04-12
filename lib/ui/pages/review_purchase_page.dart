@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/providers/sold_session_provider.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 
 class ReviewPurchasePage extends StatefulWidget {
   const ReviewPurchasePage({super.key, required this.soldSessionProvider});
@@ -76,7 +77,11 @@ class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
     setState(() {
       _pendingArchiveBatch.clear();
     });
-    await _finalizeDeletionBatch(batch);
+    await AppLoading.run<void>(
+      context,
+      action: () => _finalizeDeletionBatch(batch),
+      message: 'Deleting queued sessions...',
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -141,7 +146,7 @@ class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
             children: [
               CheckboxListTile(
                 value: isPackaging,
-                title: const Text('Status 1: Packaging'),
+                title: const Text('Status 1: Packaged'),
                 onChanged: (value) {
                   setDialogState(() {
                     isPackaging = value ?? false;
@@ -197,11 +202,15 @@ class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
       return;
     }
 
-    await widget.soldSessionProvider.updateDeliveryStatus(
-      session.id,
-      isPackaging: isPackaging,
-      isDroppedOff: isDroppedOff,
-      isDelivered: isDelivered,
+    await AppLoading.run<void>(
+      context,
+      action: () => widget.soldSessionProvider.updateDeliveryStatus(
+        session.id,
+        isPackaging: isPackaging,
+        isDroppedOff: isDroppedOff,
+        isDelivered: isDelivered,
+      ),
+      message: 'Updating delivery status...',
     );
   }
 
@@ -308,7 +317,7 @@ class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
       return 'Dropped-off';
     }
     if (session.isPackaging) {
-      return 'Packaging';
+      return 'Packaged';
     }
     return 'Pending';
   }
@@ -321,7 +330,12 @@ class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
   }
 
   Future<bool?> _onDeleteSwipe(SoldSession session) async {
-    await widget.soldSessionProvider.setArchived(session.id, archived: true);
+    await AppLoading.run<void>(
+      context,
+      action: () =>
+          widget.soldSessionProvider.setArchived(session.id, archived: true),
+      message: 'Archiving session...',
+    );
     if (!mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${session.username} moved to Archives.')),

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:jk_inventory_system/models/category.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart' as color_utils;
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 
 Future<void> showCategoryFormSheet(
   BuildContext context, {
@@ -61,20 +62,28 @@ class _CategoryFormSheetState extends State<_CategoryFormSheet> {
     final name = _nameController.text;
     final colorHex = color_utils.colorToHex(_selectedColor);
 
-    final error = widget.editing == null
-        ? await widget.provider.create(
-            name: name,
-            colorHex: colorHex,
-            requireProductImage: _requireProductImage,
-            allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
-          )
-        : await widget.provider.update(
-            id: widget.editing!.id,
-            name: name,
-            colorHex: colorHex,
-            requireProductImage: _requireProductImage,
-            allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
-          );
+    final error = await AppLoading.run<String?>(
+      context,
+      action: () {
+        return widget.editing == null
+            ? widget.provider.create(
+                name: name,
+                colorHex: colorHex,
+                requireProductImage: _requireProductImage,
+                allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
+              )
+            : widget.provider.update(
+                id: widget.editing!.id,
+                name: name,
+                colorHex: colorHex,
+                requireProductImage: _requireProductImage,
+                allowFlexibleSellingPrice: _allowFlexibleSellingPrice,
+              );
+      },
+      message: widget.editing == null
+          ? 'Creating category...'
+          : 'Updating category...',
+    );
 
     if (!mounted) return;
 

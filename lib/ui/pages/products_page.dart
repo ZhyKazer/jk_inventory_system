@@ -5,6 +5,7 @@ import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/ui/utils/color_utils.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 import 'package:jk_inventory_system/ui/widgets/forms/product_form_sheet.dart';
 import 'package:jk_inventory_system/ui/widgets/product_image_view.dart';
 
@@ -87,7 +88,11 @@ class _ProductsPageState extends State<ProductsPage> {
     );
 
     if (shouldDelete == true) {
-      await widget.productProvider.delete(productId);
+      await AppLoading.run<void>(
+        context,
+        action: () => widget.productProvider.delete(productId),
+        message: 'Deleting product...',
+      );
     }
   }
 
@@ -138,9 +143,15 @@ class _ProductsPageState extends State<ProductsPage> {
     if (shouldDelete != true) return;
 
     final idsToDelete = _selectedProductIds.toList(growable: false);
-    for (final id in idsToDelete) {
-      await widget.productProvider.delete(id);
-    }
+    await AppLoading.run<void>(
+      context,
+      action: () async {
+        for (final id in idsToDelete) {
+          await widget.productProvider.delete(id);
+        }
+      },
+      message: 'Deleting selected products...',
+    );
 
     if (!mounted) return;
     _clearSelection();

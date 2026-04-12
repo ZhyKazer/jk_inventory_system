@@ -6,6 +6,7 @@ import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/category_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
 import 'package:jk_inventory_system/providers/stock_batch_provider.dart';
+import 'package:jk_inventory_system/ui/widgets/app_loading.dart';
 
 class CreateBatchPage extends StatefulWidget {
   const CreateBatchPage({
@@ -185,7 +186,18 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
     }
 
     setState(() => _isSaving = true);
-    final error = await widget.stockBatchProvider.createBatch(items);
+    final error = await AppLoading.run<String?>(
+      context,
+      action: () async {
+        final createError = await widget.stockBatchProvider.createBatch(items);
+        if (createError != null) {
+          return createError;
+        }
+        await widget.productProvider.updatePricesFromBatchItems(items);
+        return null;
+      },
+      message: 'Saving stock batch...',
+    );
     if (!mounted) return;
     setState(() => _isSaving = false);
 
@@ -195,9 +207,6 @@ class _CreateBatchPageState extends State<CreateBatchPage> {
       ).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-
-    await widget.productProvider.updatePricesFromBatchItems(items);
-    if (!mounted) return;
 
     Navigator.of(context).pop(true);
   }

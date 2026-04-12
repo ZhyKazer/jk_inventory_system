@@ -251,6 +251,7 @@ class _HomeShellState extends State<HomeShell> {
 
     if (submitted == true) {
       await widget.soldSessionProvider.load();
+      await widget.outingProvider.load();
     }
   }
 
@@ -863,6 +864,7 @@ class _HomeShellState extends State<HomeShell> {
       AnalyticsPage(
         productProvider: widget.productProvider,
         outingProvider: widget.outingProvider,
+        soldSessionProvider: widget.soldSessionProvider,
       ),
       if (widget.currentRole == AppRole.admin)
         ReviewPurchasePage(soldSessionProvider: widget.soldSessionProvider),

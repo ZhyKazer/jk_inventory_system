@@ -26,6 +26,7 @@ class SoldFlowStepperPage extends StatefulWidget {
 
 class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
   final TextEditingController _quantityController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController();
   final ImageProcessingService _imageProcessingService =
       ImageProcessingService();
 
@@ -47,6 +48,7 @@ class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
   @override
   void dispose() {
     _quantityController.dispose();
+    _customerNameController.dispose();
     super.dispose();
   }
 
@@ -143,6 +145,10 @@ class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
   }
 
   void _continue() {
+    widget.soldSessionProvider.setDraftCustomerName(
+      _customerNameController.text,
+    );
+
     if (_currentStep == 0 && widget.soldSessionProvider.draftLines.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least one sold product first.')),
@@ -161,12 +167,23 @@ class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
       return;
     }
 
+    if (_currentStep == 1 && _customerNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Customer name is required.')),
+      );
+      return;
+    }
+
     setState(() {
       _currentStep += 1;
     });
   }
 
   Future<void> _submit() async {
+    widget.soldSessionProvider.setDraftCustomerName(
+      _customerNameController.text,
+    );
+
     setState(() => _isSubmitting = true);
     final error = await widget.soldSessionProvider.submitDraft(
       username: widget.currentUsername,
@@ -353,6 +370,15 @@ class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 10),
+        TextField(
+          controller: _customerNameController,
+          onChanged: widget.soldSessionProvider.setDraftCustomerName,
+          decoration: const InputDecoration(
+            labelText: 'Customer Name *',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
             GestureDetector(
@@ -413,6 +439,7 @@ class _SoldFlowStepperPageState extends State<SoldFlowStepperPage> {
         ),
         const SizedBox(height: 8),
         Text('Session User: ${widget.currentUsername}'),
+        Text('Customer: ${_customerNameController.text.trim()}'),
         Text('Total Quantity: ${total.toStringAsFixed(2)}'),
         const SizedBox(height: 10),
         Text(

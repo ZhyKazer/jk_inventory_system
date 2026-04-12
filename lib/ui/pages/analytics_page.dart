@@ -5,18 +5,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/providers/outing_provider.dart';
 import 'package:jk_inventory_system/providers/product_provider.dart';
+import 'package:jk_inventory_system/providers/sold_session_provider.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({
     super.key,
     required this.productProvider,
     required this.outingProvider,
+    required this.soldSessionProvider,
   });
 
   final ProductProvider productProvider;
   final OutingProvider outingProvider;
+  final SoldSessionProvider soldSessionProvider;
 
   @override
   State<AnalyticsPage> createState() => _AnalyticsPageState();
@@ -47,18 +51,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       animation: Listenable.merge([
         widget.productProvider,
         widget.outingProvider,
+        widget.soldSessionProvider,
       ]),
       builder: (context, _) {
         final products = widget.productProvider.items;
         final outings = widget.outingProvider.history;
+        final soldSessions = widget.soldSessionProvider.items;
         final analytics = _buildAnalytics(
           products: products,
           outings: outings,
+          soldSessions: soldSessions,
           selectedMonth: _selectedMonth,
         );
         final yearlyAnalytics = _buildYearlyAnalytics(
           products: products,
           outings: outings,
+          soldSessions: soldSessions,
           year: _selectedMonth.year,
         );
 
@@ -1021,12 +1029,17 @@ Map<String, _RecordProductMetrics> _recordMetricsByProduct({
 _AnalyticsData _buildAnalytics({
   required List<Product> products,
   required List<OutingRecord> outings,
+  required List<SoldSession> soldSessions,
   required DateTime selectedMonth,
 }) {
   final productMap = <String, Product>{for (final p in products) p.id: p};
   final monthOutings = outings.where((record) {
     return record.date.year == selectedMonth.year &&
         record.date.month == selectedMonth.month;
+  }).toList();
+  final monthSoldSessions = soldSessions.where((session) {
+    return session.createdAt.year == selectedMonth.year &&
+        session.createdAt.month == selectedMonth.month;
   }).toList();
 
   final soldByProduct = <String, double>{};
@@ -1075,6 +1088,30 @@ _AnalyticsData _buildAnalytics({
     }
   }
 
+  for (final session in monthSoldSessions) {
+    for (final line in session.lines) {
+      final product = productMap[line.productId];
+      final sellingPrice = product?.sellingPrice ?? 0.0;
+      final costPrice = product?.costPrice ?? 0.0;
+
+      soldByProduct.update(
+        line.productId,
+        (value) => value + line.quantity,
+        ifAbsent: () => line.quantity,
+      );
+      grossByProduct.update(
+        line.productId,
+        (value) => value + (line.quantity * sellingPrice),
+        ifAbsent: () => line.quantity * sellingPrice,
+      );
+      capitalByProduct.update(
+        line.productId,
+        (value) => value + (line.quantity * costPrice),
+        ifAbsent: () => line.quantity * costPrice,
+      );
+    }
+  }
+
   final allStats = soldByProduct.entries.map((entry) {
     final product = productMap[entry.key];
     final gross = grossByProduct[entry.key] ?? 0.0;
@@ -1117,11 +1154,33 @@ _AnalyticsData _buildAnalytics({
     weekMap[day] = [];
   }
 
+  final soldFlowByDay = <DateTime, double>{};
+
   for (final record in outings) {
     final day = DateTime(record.date.year, record.date.month, record.date.day);
     if (weekMap.containsKey(day)) {
       weekMap[day]!.add(record);
     }
+  }
+
+  for (final session in soldSessions) {
+    final day = DateTime(
+      session.createdAt.year,
+      session.createdAt.month,
+      session.createdAt.day,
+    );
+    if (!weekMap.containsKey(day)) {
+      continue;
+    }
+    final sessionSold = session.lines.fold<double>(
+      0,
+      (sum, line) => sum + line.quantity,
+    );
+    soldFlowByDay.update(
+      day,
+      (value) => value + sessionSold,
+      ifAbsent: () => sessionSold,
+    );
   }
 
   for (final day in weekDays) {
@@ -1146,7 +1205,8 @@ _AnalyticsData _buildAnalytics({
       }
     }
 
-    final daySold = dayDisplayed - dayReturned + dayReplaced;
+    final daySold =
+        (dayDisplayed - dayReturned + dayReplaced) + (soldFlowByDay[day] ?? 0);
     soldByDay[day] = daySold > 0 ? daySold : 0;
     returnedByDay[day] = dayReturned;
     discardedByDay[day] = dayDiscarded;
@@ -1171,6 +1231,7 @@ _AnalyticsData _buildAnalytics({
 _YearlyAnalyticsData _buildYearlyAnalytics({
   required List<Product> products,
   required List<OutingRecord> outings,
+  required List<SoldSession> soldSessions,
   required int year,
 }) {
   final productMap = <String, Product>{for (final p in products) p.id: p};
@@ -1206,6 +1267,26 @@ _YearlyAnalyticsData _buildYearlyAnalytics({
       capitalByMonth[monthIndex] += values.capital;
       dailyGrossByMonth[monthIndex][dayIndex] += values.gross;
       dailyCapitalByMonth[monthIndex][dayIndex] += values.capital;
+    }
+  }
+
+  for (final session in soldSessions) {
+    if (session.createdAt.year != year) {
+      continue;
+    }
+
+    final monthIndex = session.createdAt.month - 1;
+    final dayIndex = session.createdAt.day - 1;
+
+    for (final line in session.lines) {
+      final product = productMap[line.productId];
+      final gross = line.quantity * (product?.sellingPrice ?? 0.0);
+      final capital = line.quantity * (product?.costPrice ?? 0.0);
+
+      grossByMonth[monthIndex] += gross;
+      capitalByMonth[monthIndex] += capital;
+      dailyGrossByMonth[monthIndex][dayIndex] += gross;
+      dailyCapitalByMonth[monthIndex][dayIndex] += capital;
     }
   }
 

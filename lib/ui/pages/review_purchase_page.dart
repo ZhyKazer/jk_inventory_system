@@ -1,174 +1,211 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
-import 'package:intl/intl.dart';
 import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/providers/sold_session_provider.dart';
-import 'package:path/path.dart' as p;
 
-class ReviewPurchasePage extends StatelessWidget {
+class ReviewPurchasePage extends StatefulWidget {
   const ReviewPurchasePage({super.key, required this.soldSessionProvider});
 
   final SoldSessionProvider soldSessionProvider;
 
-  Future<void> _markDone(BuildContext context, SoldSession session) async {
-    await soldSessionProvider.markDone(session.id);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Marked purchase session from ${session.username} as done.',
-        ),
-      ),
-    );
-  }
+  @override
+  State<ReviewPurchasePage> createState() => _ReviewPurchasePageState();
+}
 
-  Future<void> _downloadSessionImages(
-    BuildContext context,
-    SoldSession session,
-  ) async {
-    final targetBasePath = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select where to save purchase screenshots',
-    );
+class _ReviewPurchasePageState extends State<ReviewPurchasePage> {
+  final List<SoldSession> _pendingArchiveBatch = <SoldSession>[];
+  final Set<String> _queuedDeletionIds = <String>{};
 
-    if (!context.mounted || targetBasePath == null || targetBasePath.isEmpty) {
+  Future<void> _queueDeliveredSessionForDelete(SoldSession session) async {
+    if (_queuedDeletionIds.contains(session.id)) {
       return;
     }
 
-    final sanitizedUsername = session.username
-        .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
-        .trim();
-    final usernameFolder = sanitizedUsername.isEmpty
-        ? 'unknown_user'
-        : sanitizedUsername;
-    final outputDir = Directory(p.join(targetBasePath, usernameFolder));
-    if (!await outputDir.exists()) {
-      await outputDir.create(recursive: true);
-    }
+    setState(() {
+      _queuedDeletionIds.add(session.id);
+      _pendingArchiveBatch.add(session);
+    });
 
-    final datePart = DateFormat('ddMMyyyy_HH-mm').format(session.createdAt);
-    var exportCount = 0;
-
-    for (var i = 0; i < session.lines.length; i++) {
-      final line = session.lines[i];
-      final seq = (i + 1).toString().padLeft(2, '0');
-      final gcashName = 'GCASH_${usernameFolder}_${datePart}_$seq.jpg';
-      final scoName = 'SCO_${usernameFolder}_${datePart}_$seq.jpg';
-
-      if ((line.gcashReceiptImagePath ?? '').trim().isNotEmpty) {
-        final saved = await _saveAsJpg(
-          sourcePath: line.gcashReceiptImagePath!,
-          targetPath: p.join(outputDir.path, gcashName),
-        );
-        if (saved) exportCount++;
-      }
-
-      if ((line.shopeeCheckoutImagePath ?? '').trim().isNotEmpty) {
-        final saved = await _saveAsJpg(
-          sourcePath: line.shopeeCheckoutImagePath!,
-          targetPath: p.join(outputDir.path, scoName),
-        );
-        if (saved) exportCount++;
-      }
-    }
-
-    if (!context.mounted) return;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Saved $exportCount image(s) to ${outputDir.path}'),
+        content: Text(
+          'Queued ${session.username} for deletion (${_pendingArchiveBatch.length} queued).',
+        ),
       ),
     );
   }
 
-  Future<bool> _saveAsJpg({
-    required String sourcePath,
-    required String targetPath,
-  }) async {
-    try {
-      final bytes = await File(sourcePath).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) {
-        await File(targetPath).writeAsBytes(bytes, flush: true);
-        return true;
-      }
-
-      final encoded = img.encodeJpg(decoded, quality: 88);
-      await File(targetPath).writeAsBytes(encoded, flush: true);
-      return true;
-    } catch (_) {
-      return false;
+  Future<void> _confirmAndDeleteQueued() async {
+    if (_pendingArchiveBatch.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No queued items to delete.')),
+      );
+      return;
     }
-  }
 
-  Future<void> _showSessionDetails(BuildContext context, SoldSession session) {
-    return showDialog<void>(
+    final count = _pendingArchiveBatch.length;
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Purchase Session Details'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('User: ${session.username}'),
-                Text(
-                  'Date: ${DateFormat('MMM d, yyyy • h:mm a').format(session.createdAt)}',
-                ),
-                Text(
-                  'Total Quantity: ${session.totalQuantity.toStringAsFixed(2)}',
-                ),
-                const SizedBox(height: 10),
-                for (final line in session.lines)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${line.productName} • Qty ${line.quantity.toStringAsFixed(2)}',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          _detailImagePreview(
-                            context,
-                            imagePath: line.gcashReceiptImagePath,
-                            label: 'GCash Receipt',
-                          ),
-                          const SizedBox(height: 6),
-                          _detailImagePreview(
-                            context,
-                            imagePath: line.shopeeCheckoutImagePath,
-                            label: 'Shopee Checkout Info',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text(
+          'Delete $count queued archived instance(s) permanently from database and photos?',
         ),
         actions: [
-          OutlinedButton.icon(
-            onPressed: () => _downloadSessionImages(context, session),
-            icon: const Icon(Icons.download_outlined),
-            label: const Text('Download Images'),
-          ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    final batch = _pendingArchiveBatch.toList(growable: false);
+    setState(() {
+      _pendingArchiveBatch.clear();
+    });
+    await _finalizeDeletionBatch(batch);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Deleted $count queued instance(s).')),
+    );
   }
 
-  Future<void> _showLargePreview(BuildContext context, String imagePath) {
+  Future<void> _finalizeDeletionBatch(List<SoldSession> batch) async {
+    for (final session in batch) {
+      await widget.soldSessionProvider.deleteSession(session.id);
+    }
+    await _cleanupSessionPhotos(batch);
+
+    if (!mounted) return;
+    setState(() {
+      for (final session in batch) {
+        _queuedDeletionIds.remove(session.id);
+      }
+    });
+  }
+
+  Future<void> _cleanupSessionPhotos(List<SoldSession> batch) async {
+    for (final session in batch) {
+      for (final line in session.lines) {
+        await _deletePhotoReference(line.gcashReceiptImagePath);
+        await _deletePhotoReference(line.shopeeCheckoutImagePath);
+      }
+    }
+  }
+
+  Future<void> _deletePhotoReference(String? imagePath) async {
+    final normalized = (imagePath ?? '').trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    try {
+      if (normalized.startsWith('gs://') || normalized.startsWith('https://')) {
+        await FirebaseStorage.instance.refFromURL(normalized).delete();
+        return;
+      }
+
+      final localFile = File(normalized);
+      if (await localFile.exists()) {
+        await localFile.delete();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _showStatusDialog(SoldSession session) async {
+    var isPackaging = session.isPackaging;
+    var isDroppedOff = session.isDroppedOff;
+    var isDelivered = session.isDelivered;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Update Delivery Status'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CheckboxListTile(
+                value: isPackaging,
+                title: const Text('Status 1: Packaging'),
+                onChanged: (value) {
+                  setDialogState(() {
+                    isPackaging = value ?? false;
+                    if (!isPackaging) {
+                      isDroppedOff = false;
+                      isDelivered = false;
+                    }
+                  });
+                },
+              ),
+              CheckboxListTile(
+                value: isDroppedOff,
+                title: const Text('Status 2: Dropped-off'),
+                onChanged: isPackaging
+                    ? (value) {
+                        setDialogState(() {
+                          isDroppedOff = value ?? false;
+                          if (!isDroppedOff) {
+                            isDelivered = false;
+                          }
+                        });
+                      }
+                    : null,
+              ),
+              CheckboxListTile(
+                value: isDelivered,
+                title: const Text('Status 3: Delivered'),
+                onChanged: (isPackaging && isDroppedOff)
+                    ? (value) {
+                        setDialogState(() {
+                          isDelivered = value ?? false;
+                        });
+                      }
+                    : null,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved != true) {
+      return;
+    }
+
+    await widget.soldSessionProvider.updateDeliveryStatus(
+      session.id,
+      isPackaging: isPackaging,
+      isDroppedOff: isDroppedOff,
+      isDelivered: isDelivered,
+    );
+  }
+
+  Future<void> _showLargePreview(String imagePath) {
     return showDialog<void>(
       context: context,
       builder: (_) => Dialog(
@@ -191,135 +228,266 @@ class ReviewPurchasePage extends StatelessWidget {
     );
   }
 
-  Widget _detailImagePreview(
-    BuildContext context, {
-    required String? imagePath,
-    required String label,
-  }) {
-    if (imagePath == null || imagePath.trim().isEmpty) {
-      return Container(
-        width: double.infinity,
-        height: 180,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+  Widget _proofPreview({required String label, required String? imagePath}) {
+    final path = (imagePath ?? '').trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 6),
+        InkWell(
           borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.image_not_supported_outlined),
-            const SizedBox(height: 6),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      );
-    }
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => _showLargePreview(context, imagePath),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 6),
-          Container(
+          onTap: path.isEmpty ? null : () => _showLargePreview(path),
+          child: Container(
             width: double.infinity,
-            height: 180,
+            height: 190,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(imagePath),
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => Container(
-                  alignment: Alignment.center,
-                  color: Colors.red.withValues(alpha: 0.15),
-                  child: const Icon(Icons.broken_image_outlined),
+            child: path.isEmpty
+                ? const Center(child: Text('No image'))
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      File(path),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) =>
+                          const Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showSessionInfo(SoldSession session) {
+    final firstLine = session.lines.isNotEmpty ? session.lines.first : null;
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Purchase Session Info'),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Customer name: ${session.customerName}'),
+                Text('Mod/Admin username: ${session.username}'),
+                const SizedBox(height: 10),
+                _proofPreview(
+                  label: 'Gcash image',
+                  imagePath: firstLine?.gcashReceiptImagePath,
                 ),
-              ),
+                const SizedBox(height: 10),
+                _proofPreview(
+                  label: 'SCO image',
+                  imagePath: firstLine?.shopeeCheckoutImagePath,
+                ),
+              ],
             ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
   }
 
+  String _statusLabel(SoldSession session) {
+    if (session.isDelivered) {
+      return 'Delivered';
+    }
+    if (session.isDroppedOff) {
+      return 'Dropped-off';
+    }
+    if (session.isPackaging) {
+      return 'Packaging';
+    }
+    return 'Pending';
+  }
+
+  Color _statusColor(SoldSession session) {
+    if (session.isDelivered) return Colors.green;
+    if (session.isDroppedOff) return Colors.blue;
+    if (session.isPackaging) return Colors.orange;
+    return Colors.grey;
+  }
+
+  Future<bool?> _onDeleteSwipe(SoldSession session) async {
+    await widget.soldSessionProvider.setArchived(session.id, archived: true);
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${session.username} moved to Archives.')),
+    );
+    return false;
+  }
+
+  Widget _buildSessionList(
+    List<SoldSession> sessions, {
+    required bool archived,
+  }) {
+    if (sessions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            archived
+                ? 'No archived sessions yet.'
+                : 'No active sold sessions submitted yet.',
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemBuilder: (context, index) {
+        final session = sessions[index];
+        final productNames = session.lines
+            .map((line) => line.productName)
+            .toSet()
+            .join(', ');
+        final isDelivered = session.isDelivered;
+
+        return Dismissible(
+          key: ValueKey('sold_${session.id}_$archived'),
+          direction: ((!archived && isDelivered) || archived)
+              ? DismissDirection.endToStart
+              : DismissDirection.none,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: archived
+                  ? Colors.red.withValues(alpha: 0.2)
+                  : Colors.blue.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              archived ? Icons.delete_outline : Icons.archive_outlined,
+              color: archived ? Colors.red : Colors.blue,
+            ),
+          ),
+          confirmDismiss: (_) => archived
+              ? () async {
+                  await _queueDeliveredSessionForDelete(session);
+                  return false;
+                }()
+              : _onDeleteSwipe(session),
+          child: Card(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _showSessionInfo(session),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${session.username} • ${session.customerName}',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Quantity of Purchase: ${session.totalQuantity.toStringAsFixed(2)}',
+                    ),
+                    Text('Products Sold: $productNames'),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Status: ${archived ? 'Archived' : _statusLabel(session)}',
+                      style: TextStyle(
+                        color: archived
+                            ? Colors.blueGrey
+                            : _statusColor(session),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (!archived && isDelivered)
+                      const Text('Swipe left to move to Archives.'),
+                    if (archived)
+                      const Text('Swipe left to queue for manual deletion.'),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showStatusDialog(session),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Update Status'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemCount: sessions.length,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: soldSessionProvider,
+      animation: widget.soldSessionProvider,
       builder: (context, _) {
-        final sessions = soldSessionProvider.items;
-        if (sessions.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text('No sold sessions submitted yet.'),
-            ),
-          );
-        }
+        final visibleSessions = widget.soldSessionProvider.items
+            .where((session) => !_queuedDeletionIds.contains(session.id))
+            .toList(growable: false);
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemBuilder: (context, index) {
-            final session = sessions[index];
-            final productNames = session.lines
-                .map((line) => line.productName)
-                .toSet()
-                .join(', ');
-            final isDone = session.status == SoldSessionStatus.done;
+        final active = visibleSessions
+            .where((session) => !session.isArchived)
+            .toList(growable: false);
+        final archived = visibleSessions
+            .where((session) => session.isArchived)
+            .toList(growable: false);
 
-            return Dismissible(
-              key: ValueKey('sold_${session.id}'),
-              direction: isDone
-                  ? DismissDirection.none
-                  : DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.green,
-                ),
-              ),
-              confirmDismiss: (_) async {
-                await _markDone(context, session);
-                return false;
-              },
-              child: Card(
-                color: isDone
-                    ? Colors.green.withValues(alpha: 0.15)
-                    : Theme.of(context).colorScheme.surfaceContainerLowest,
-                child: ListTile(
-                  onLongPress: () => _showSessionDetails(context, session),
-                  title: Text(session.username),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        return DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              if (_pendingArchiveBatch.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Row(
                     children: [
-                      const SizedBox(height: 4),
-                      Text(
-                        'Quantity of Purchase: ${session.totalQuantity.toStringAsFixed(2)}',
+                      Expanded(
+                        child: Text(
+                          '${_pendingArchiveBatch.length} queued for deletion',
+                        ),
                       ),
-                      Text('Products Sold: $productNames'),
+                      FilledButton.icon(
+                        onPressed: _confirmAndDeleteQueued,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete Queued'),
+                      ),
                     ],
                   ),
-                  trailing: isDone
-                      ? const Icon(Icons.verified, color: Colors.green)
-                      : const Icon(Icons.swipe_left_alt_outlined),
+                ),
+              const TabBar(
+                tabs: [
+                  Tab(text: 'Active'),
+                  Tab(text: 'Archives'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildSessionList(active, archived: false),
+                    _buildSessionList(archived, archived: true),
+                  ],
                 ),
               ),
-            );
-          },
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemCount: sessions.length,
+            ],
+          ),
         );
       },
     );

@@ -1,10 +1,12 @@
 import 'package:jk_inventory_system/models/outing_record.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 
 enum InventoryMovementType {
   batchIn,
   displayedOut,
+  soldOut,
   returnedIn,
   discardedOut,
   discardedReplacedIn,
@@ -36,6 +38,7 @@ class InventoryStockCalculator {
   List<InventoryLedgerEntry> buildLedger({
     required List<StockBatch> batches,
     required List<OutingRecord> outings,
+    List<SoldSession> soldSessions = const <SoldSession>[],
   }) {
     final entries = <InventoryLedgerEntry>[];
 
@@ -108,6 +111,21 @@ class InventoryStockCalculator {
       }
     }
 
+    for (final session in soldSessions) {
+      for (final line in session.lines) {
+        entries.add(
+          InventoryLedgerEntry(
+            productId: line.productId,
+            movementType: InventoryMovementType.soldOut,
+            unitType: UnitType.quantity,
+            value: line.quantity,
+            referenceId: session.id,
+            createdAt: session.createdAt,
+          ),
+        );
+      }
+    }
+
     entries.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return entries;
   }
@@ -117,9 +135,14 @@ class InventoryStockCalculator {
     required UnitType unitType,
     required List<StockBatch> batches,
     required List<OutingRecord> outings,
+    List<SoldSession> soldSessions = const <SoldSession>[],
   }) {
     return _stockFromLedger(
-      entries: buildLedger(batches: batches, outings: outings),
+      entries: buildLedger(
+        batches: batches,
+        outings: outings,
+        soldSessions: soldSessions,
+      ),
       productId: productId,
       unitType: unitType,
     );
@@ -131,12 +154,14 @@ class InventoryStockCalculator {
     required DateTime date,
     required List<StockBatch> batches,
     required List<OutingRecord> outings,
+    List<SoldSession> soldSessions = const <SoldSession>[],
   }) {
     final startOfDate = DateTime(date.year, date.month, date.day);
     return _stockFromLedger(
       entries: buildLedger(
         batches: batches,
         outings: outings,
+        soldSessions: soldSessions,
       ).where((entry) => entry.createdAt.isBefore(startOfDate)).toList(),
       productId: productId,
       unitType: unitType,
@@ -149,6 +174,7 @@ class InventoryStockCalculator {
     required DateTime date,
     required List<StockBatch> batches,
     required List<OutingRecord> outings,
+    List<SoldSession> soldSessions = const <SoldSession>[],
   }) {
     return displayedLimit(
       productId: productId,
@@ -156,6 +182,7 @@ class InventoryStockCalculator {
       date: date,
       batches: batches,
       outings: outings,
+      soldSessions: soldSessions,
     );
   }
 
@@ -181,6 +208,7 @@ class InventoryStockCalculator {
       case InventoryMovementType.discardedReplacedIn:
         return entry.value;
       case InventoryMovementType.displayedOut:
+      case InventoryMovementType.soldOut:
       case InventoryMovementType.discardedOut:
         return -entry.value;
     }

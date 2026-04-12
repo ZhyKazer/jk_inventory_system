@@ -19,4 +19,7 @@ class SoldSessionRepository implements SoldSessionRepositoryInterface {
 
   @override
   Future<void> update(SoldSession session) => _box.put(session.id, session);
+
+  @override
+  Future<void> delete(String id) => _box.delete(id);
 }

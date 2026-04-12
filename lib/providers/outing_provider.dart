@@ -4,6 +4,7 @@ import 'package:jk_inventory_system/models/activity_log.dart';
 import 'package:uuid/uuid.dart';
 import 'package:jk_inventory_system/models/outing_record.dart';
 import 'package:jk_inventory_system/models/product.dart';
+import 'package:jk_inventory_system/models/sold_session.dart';
 import 'package:jk_inventory_system/models/stock_batch.dart';
 import 'package:jk_inventory_system/models/unit_type.dart';
 import 'package:jk_inventory_system/providers/activity_log_provider.dart';
@@ -70,6 +71,7 @@ class OutingProvider extends ChangeNotifier {
     this._repository,
     this._getBatches,
     this._getProducts,
+    this._getSoldSessions,
     this._activityLogProvider, {
     FirebaseSyncService? syncService,
   }) : _syncService = syncService ?? FirebaseSyncService();
@@ -77,6 +79,7 @@ class OutingProvider extends ChangeNotifier {
   final OutingRepositoryInterface _repository;
   final List<StockBatch> Function() _getBatches;
   final List<Product> Function() _getProducts;
+  final List<SoldSession> Function() _getSoldSessions;
   final ActivityLogProvider _activityLogProvider;
   final FirebaseSyncService _syncService;
   final InventoryStockCalculator _stockCalculator =
@@ -137,6 +140,7 @@ class OutingProvider extends ChangeNotifier {
       unitType: unitType,
       batches: _getBatches(),
       outings: _history,
+      soldSessions: _getSoldSessions(),
     );
   }
 
@@ -147,6 +151,7 @@ class OutingProvider extends ChangeNotifier {
       date: date,
       batches: _getBatches(),
       outings: _history,
+      soldSessions: _getSoldSessions(),
     );
   }
 
@@ -157,6 +162,7 @@ class OutingProvider extends ChangeNotifier {
       date: date,
       batches: _getBatches(),
       outings: _history,
+      soldSessions: _getSoldSessions(),
     );
   }
 

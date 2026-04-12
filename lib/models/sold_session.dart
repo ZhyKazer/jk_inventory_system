@@ -44,18 +44,28 @@ class SoldSession {
   SoldSession({
     required this.id,
     required this.username,
+    required this.customerName,
     required this.createdAt,
     required this.lines,
     required this.status,
+    this.isPackaging = false,
+    this.isDroppedOff = false,
+    this.isDelivered = false,
+    this.isArchived = false,
     this.actorUid,
   });
 
   final String id;
   final String username;
+  final String customerName;
   final String? actorUid;
   final DateTime createdAt;
   final List<SoldProductLine> lines;
   final SoldSessionStatus status;
+  final bool isPackaging;
+  final bool isDroppedOff;
+  final bool isDelivered;
+  final bool isArchived;
 
   double get totalQuantity {
     var total = 0.0;
@@ -68,18 +78,28 @@ class SoldSession {
   SoldSession copyWith({
     String? id,
     String? username,
+    String? customerName,
     Object? actorUid = _noValue,
     DateTime? createdAt,
     List<SoldProductLine>? lines,
     SoldSessionStatus? status,
+    bool? isPackaging,
+    bool? isDroppedOff,
+    bool? isDelivered,
+    bool? isArchived,
   }) {
     return SoldSession(
       id: id ?? this.id,
       username: username ?? this.username,
+      customerName: customerName ?? this.customerName,
       actorUid: actorUid == _noValue ? this.actorUid : actorUid as String?,
       createdAt: createdAt ?? this.createdAt,
       lines: lines ?? this.lines,
       status: status ?? this.status,
+      isPackaging: isPackaging ?? this.isPackaging,
+      isDroppedOff: isDroppedOff ?? this.isDroppedOff,
+      isDelivered: isDelivered ?? this.isDelivered,
+      isArchived: isArchived ?? this.isArchived,
     );
   }
 
@@ -119,13 +139,45 @@ class SoldSessionAdapter extends TypeAdapter<SoldSession> {
       );
     }
 
+    var isPackaging = false;
+    var isDroppedOff = false;
+    var isDelivered = false;
+    var isArchived = false;
+    try {
+      isPackaging = reader.readBool();
+      isDroppedOff = reader.readBool();
+      isDelivered = reader.readBool();
+    } on RangeError {
+      isPackaging = false;
+      isDroppedOff = false;
+      isDelivered = false;
+    }
+
+    try {
+      isArchived = reader.readBool();
+    } on RangeError {
+      isArchived = false;
+    }
+
+    var customerName = '';
+    try {
+      customerName = reader.readString();
+    } on RangeError {
+      customerName = '';
+    }
+
     return SoldSession(
       id: id,
       username: username,
+      customerName: customerName,
       actorUid: actorUid,
       createdAt: createdAt,
       lines: lines,
       status: status,
+      isPackaging: isPackaging,
+      isDroppedOff: isDroppedOff,
+      isDelivered: isDelivered,
+      isArchived: isArchived,
     );
   }
 
@@ -157,5 +209,12 @@ class SoldSessionAdapter extends TypeAdapter<SoldSession> {
         writer.writeString(line.shopeeCheckoutImagePath!);
       }
     }
+
+    writer
+      ..writeBool(obj.isPackaging)
+      ..writeBool(obj.isDroppedOff)
+      ..writeBool(obj.isDelivered)
+      ..writeBool(obj.isArchived)
+      ..writeString(obj.customerName);
   }
 }

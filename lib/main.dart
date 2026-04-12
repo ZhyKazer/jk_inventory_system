@@ -112,13 +112,18 @@ class _InventoryAppState extends State<InventoryApp> {
       repo.stockBatches,
       _activityLogProvider,
     );
+    _soldSessionProvider = SoldSessionProvider(
+      repo.soldSessions,
+      getBatches: () => _stockBatchProvider.items,
+      getOutings: () => _outingProvider.history,
+    );
     _outingProvider = OutingProvider(
       repo.outings,
       () => _stockBatchProvider.items,
       () => _productProvider.items,
+      () => _soldSessionProvider.items,
       _activityLogProvider,
     );
-    _soldSessionProvider = SoldSessionProvider(repo.soldSessions);
 
     _bootstrapAppState();
   }

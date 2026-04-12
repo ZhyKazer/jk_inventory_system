@@ -189,6 +189,10 @@ class FirebaseSyncService {
         .set(sessionMap, SetOptions(merge: true));
   }
 
+  Future<void> deleteSoldSession(String id) async {
+    await _firestore.collection('soldSessions').doc(id).delete();
+  }
+
   Future<void> upsertActivity(ActivityLog activity) async {
     await _firestore
         .collection('activities')
@@ -562,9 +566,14 @@ class FirebaseSyncService {
     return {
       'id': session.id,
       'username': session.username,
+      'customerName': session.customerName,
       'actorUid': session.actorUid,
       'createdAt': session.createdAt,
       'status': session.status.name,
+      'isPackaging': session.isPackaging,
+      'isDroppedOff': session.isDroppedOff,
+      'isDelivered': session.isDelivered,
+      'isArchived': session.isArchived,
       'lines': mappedLines,
     };
   }
@@ -782,10 +791,15 @@ class FirebaseSyncService {
     return SoldSession(
       id: id,
       username: username,
+      customerName: _asString(map['customerName']) ?? '',
       actorUid: _asString(map['actorUid']),
       createdAt: _asDateTime(map['createdAt']) ?? DateTime.now(),
       lines: lines,
       status: _soldSessionStatusFromName(_asString(map['status'])),
+      isPackaging: _asBool(map['isPackaging']) ?? false,
+      isDroppedOff: _asBool(map['isDroppedOff']) ?? false,
+      isDelivered: _asBool(map['isDelivered']) ?? false,
+      isArchived: _asBool(map['isArchived']) ?? false,
     );
   }
 

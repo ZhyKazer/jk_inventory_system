@@ -38,6 +38,7 @@ abstract class SoldSessionRepositoryInterface {
   List<SoldSession> getAll();
   Future<void> create(SoldSession session);
   Future<void> update(SoldSession session);
+  Future<void> delete(String id);
 }
 
 /// High-level local inventory facade to allow swapping implementations later.

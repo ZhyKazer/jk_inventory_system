@@ -155,7 +155,7 @@ class _HomeShellState extends State<HomeShell> {
   bool get _canMutateProduct => widget.currentRole == AppRole.admin;
   bool get _canMutateCategory => widget.currentRole == AppRole.admin;
   bool get _canCreateBatch => widget.currentRole == AppRole.admin;
-  bool get _canStartOuting => widget.currentRole != AppRole.view;
+  bool get _canStartOuting => widget.currentRole == AppRole.admin;
   bool get _canStartSold => widget.currentRole != AppRole.view;
   bool get _canRegisterAccount => widget.currentRole == AppRole.admin;
   bool get _canSeeBackupOptions => widget.currentRole == AppRole.admin;

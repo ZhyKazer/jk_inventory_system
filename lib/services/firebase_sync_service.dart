@@ -182,10 +182,11 @@ class FirebaseSyncService {
   }
 
   Future<void> upsertSoldSession(SoldSession session) async {
+    final sessionMap = await _soldSessionToMap(session);
     await _firestore
         .collection('soldSessions')
         .doc(session.id)
-        .set(_soldSessionToMap(session), SetOptions(merge: true));
+        .set(sessionMap, SetOptions(merge: true));
   }
 
   Future<void> upsertActivity(ActivityLog activity) async {
@@ -266,10 +267,14 @@ class FirebaseSyncService {
 
     onProgress?.call('Preparing sold sessions...');
     for (final session in soldSessions) {
+      final sessionMap = await _soldSessionToMap(
+        session,
+        onProgress: (message) => onProgress?.call(message),
+      );
       writes.add(
         _SyncWrite(
           ref: _firestore.collection('soldSessions').doc(session.id),
-          data: _soldSessionToMap(session),
+          data: sessionMap,
         ),
       );
     }
@@ -523,24 +528,85 @@ class FirebaseSyncService {
     };
   }
 
-  Map<String, dynamic> _soldSessionToMap(SoldSession session) {
+  Future<Map<String, dynamic>> _soldSessionToMap(
+    SoldSession session, {
+    void Function(String message)? onProgress,
+  }) async {
+    final mappedLines = <Map<String, dynamic>>[];
+    for (var index = 0; index < session.lines.length; index++) {
+      final line = session.lines[index];
+      final gcashPath = await _resolveTransactionImagePath(
+        sessionId: session.id,
+        lineIndex: index,
+        proofKind: 'gcash',
+        currentPath: line.gcashReceiptImagePath,
+        onProgress: onProgress,
+      );
+      final shopeePath = await _resolveTransactionImagePath(
+        sessionId: session.id,
+        lineIndex: index,
+        proofKind: 'sco',
+        currentPath: line.shopeeCheckoutImagePath,
+        onProgress: onProgress,
+      );
+
+      mappedLines.add({
+        'productId': line.productId,
+        'productName': line.productName,
+        'quantity': line.quantity,
+        'gcashReceiptImagePath': gcashPath,
+        'shopeeCheckoutImagePath': shopeePath,
+      });
+    }
+
     return {
       'id': session.id,
       'username': session.username,
       'actorUid': session.actorUid,
       'createdAt': session.createdAt,
       'status': session.status.name,
-      'lines': [
-        for (final line in session.lines)
-          {
-            'productId': line.productId,
-            'productName': line.productName,
-            'quantity': line.quantity,
-            'gcashReceiptImagePath': line.gcashReceiptImagePath,
-            'shopeeCheckoutImagePath': line.shopeeCheckoutImagePath,
-          },
-      ],
+      'lines': mappedLines,
     };
+  }
+
+  Future<String?> _resolveTransactionImagePath({
+    required String sessionId,
+    required int lineIndex,
+    required String proofKind,
+    required String? currentPath,
+    void Function(String message)? onProgress,
+  }) async {
+    final normalized = currentPath?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+
+    if (normalized.startsWith('gs://')) {
+      return normalized;
+    }
+
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      return normalized;
+    }
+
+    final imageFile = File(normalized);
+    if (!imageFile.existsSync()) {
+      return normalized;
+    }
+
+    onProgress?.call(
+      'Uploading $proofKind proof image for sold session $sessionId...',
+    );
+
+    final namePart = imageFile.uri.pathSegments.isNotEmpty
+        ? imageFile.uri.pathSegments.last
+        : '$proofKind.jpg';
+    final objectPath =
+        'transactions/$sessionId/${proofKind}_${lineIndex + 1}_$namePart';
+    final ref = _storage.ref(objectPath);
+    await ref.putFile(imageFile);
+
+    return 'gs://${_storage.bucket}/$objectPath';
   }
 
   Category? _categoryFromMap(Map<String, dynamic> map) {

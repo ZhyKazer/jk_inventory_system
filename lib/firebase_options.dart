@@ -17,21 +17,21 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      return web;
+      throw UnsupportedError(
+        'DefaultFirebaseOptions are not configured for web yet. '
+        'Create a web app in project zhyshi-inventory-system and regenerate this file.',
+      );
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        return ios;
       case TargetPlatform.macOS:
-        return macos;
       case TargetPlatform.windows:
-        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
+          'DefaultFirebaseOptions are currently configured only for Android. '
+          'Register this platform in Firebase and regenerate this file.',
         );
       default:
         throw UnsupportedError(
@@ -40,47 +40,11 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDFt9ANeJl_kD3KQZ8hGDsycZVWsvhOqCw',
-    appId: '1:702685581328:web:6e039665e19d9241a07a95',
-    messagingSenderId: '702685581328',
-    projectId: 'bnm-inventory',
-    authDomain: 'bnm-inventory.firebaseapp.com',
-    storageBucket: 'bnm-inventory.firebasestorage.app',
-  );
-
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAkNzRn6w2pfbT_X_uQpjg3j-t5q6_1L2w',
-    appId: '1:702685581328:android:1f0d492164ce5308a07a95',
-    messagingSenderId: '702685581328',
-    projectId: 'bnm-inventory',
-    storageBucket: 'bnm-inventory.firebasestorage.app',
-  );
-
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyArrm7JVM1OLrcrEgD1UTmYjsbNstQmml8',
-    appId: '1:702685581328:ios:b3776a0cd60efe5ba07a95',
-    messagingSenderId: '702685581328',
-    projectId: 'bnm-inventory',
-    storageBucket: 'bnm-inventory.firebasestorage.app',
-    iosBundleId: 'com.zhykazer.bnm.inventory',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyArrm7JVM1OLrcrEgD1UTmYjsbNstQmml8',
-    appId: '1:702685581328:ios:e7aacaa27f6b7fe7a07a95',
-    messagingSenderId: '702685581328',
-    projectId: 'bnm-inventory',
-    storageBucket: 'bnm-inventory.firebasestorage.app',
-    iosBundleId: 'com.example.jkInventorySystem',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDFt9ANeJl_kD3KQZ8hGDsycZVWsvhOqCw',
-    appId: '1:702685581328:web:f0b9f8c654a1ae5aa07a95',
-    messagingSenderId: '702685581328',
-    projectId: 'bnm-inventory',
-    authDomain: 'bnm-inventory.firebaseapp.com',
-    storageBucket: 'bnm-inventory.firebasestorage.app',
+    apiKey: 'AIzaSyDcJBHjjDDTwLFfEayriAuleUpp9zou3zo',
+    appId: '1:871442789287:android:4002a8ddf8670a09df3c82',
+    messagingSenderId: '871442789287',
+    projectId: 'zhyshi-inventory-system',
+    storageBucket: 'zhyshi-inventory-system.firebasestorage.app',
   );
 }

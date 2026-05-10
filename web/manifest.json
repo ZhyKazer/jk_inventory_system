@@ -1,11 +1,11 @@
 {
-    "name": "bnm",
-    "short_name": "bnm",
+    "name": "ZhyShi Inventory System",
+    "short_name": "ZhyShi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Inventory management app for ZhyShi.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

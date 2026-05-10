@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "702685581328",
-    "project_id": "bnm-inventory",
-    "storage_bucket": "bnm-inventory.firebasestorage.app"
+    "project_number": "871442789287",
+    "project_id": "zhyshi-inventory-system",
+    "storage_bucket": "zhyshi-inventory-system.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:702685581328:android:1f0d492164ce5308a07a95",
+        "mobilesdk_app_id": "1:871442789287:android:4002a8ddf8670a09df3c82",
         "android_client_info": {
-          "package_name": "com.zhykazer.bnm.inventory"
+          "package_name": "com.zhykazer.zhyshi.inventory"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAkNzRn6w2pfbT_X_uQpjg3j-t5q6_1L2w"
+          "current_key": "AIzaSyDcJBHjjDDTwLFfEayriAuleUpp9zou3zo"
         }
       ],
       "services": {

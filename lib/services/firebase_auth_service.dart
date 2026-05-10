@@ -288,7 +288,7 @@ class FirebaseAuthService {
 
   String _usernameToAuthEmail(String usernameLower) {
     final safe = usernameLower.replaceAll(RegExp(r'[^a-z0-9._-]'), '_');
-    return '$safe@bnm.local';
+    return '$safe@zhyshi.local';
   }
 
   String _mapFirebaseAuthError(FirebaseAuthException error) {

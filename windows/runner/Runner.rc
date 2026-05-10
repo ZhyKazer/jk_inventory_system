@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "bend_and_make_system" "\0"
+            VALUE "FileDescription", "ZhyShi Inventory System" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "bend_and_make_system" "\0"
+            VALUE "InternalName", "zhyshi_inventory_system" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "bend_and_make_system.exe" "\0"
-            VALUE "ProductName", "bend_and_make_system" "\0"
+            VALUE "OriginalFilename", "zhyshi_inventory_system.exe" "\0"
+            VALUE "ProductName", "ZhyShi Inventory System" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

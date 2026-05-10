@@ -7,7 +7,7 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
     <application
-        android:label="B&amp;M"
+        android:label="ZhyShi Inventory System"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

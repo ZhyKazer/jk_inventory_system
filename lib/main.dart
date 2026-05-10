@@ -27,10 +27,19 @@ import 'package:url_launcher/url_launcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  _configureFirebaseTargets();
+  var firebaseEnabled = false;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    _configureFirebaseTargets();
+    firebaseEnabled = true;
+  } on UnsupportedError {
+    // Allow desktop/local testing when Firebase isn't configured for platform.
+    firebaseEnabled = false;
+  }
   await InventoryStorage.initialize();
-  runApp(const InventoryApp());
+  runApp(InventoryApp(firebaseEnabled: firebaseEnabled));
 }
 
 const bool _useFirebaseEmulators = bool.fromEnvironment(
@@ -61,7 +70,9 @@ void _configureFirebaseTargets() {
 }
 
 class InventoryApp extends StatefulWidget {
-  const InventoryApp({super.key});
+  const InventoryApp({super.key, required this.firebaseEnabled});
+
+  final bool firebaseEnabled;
 
   @override
   State<InventoryApp> createState() => _InventoryAppState();
@@ -76,10 +87,10 @@ class _InventoryAppState extends State<InventoryApp> {
   late final SoldSessionProvider _soldSessionProvider;
   AppThemeOption _selectedTheme = AppThemeOption.dark;
   Color _customThemeColor = Colors.deepPurple;
-  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
+  FirebaseAuthService? _firebaseAuthService;
   final AuthSessionService _authSessionService = AuthSessionService();
-  final FirebaseSyncService _firebaseSyncService = FirebaseSyncService();
-  final StartupPolicyService _startupPolicyService = StartupPolicyService();
+  FirebaseSyncService? _firebaseSyncService;
+  StartupPolicyService? _startupPolicyService;
   final ApkUpdateService _apkUpdateService = ApkUpdateService();
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
@@ -102,6 +113,12 @@ class _InventoryAppState extends State<InventoryApp> {
   @override
   void initState() {
     super.initState();
+
+    if (widget.firebaseEnabled) {
+      _firebaseAuthService = FirebaseAuthService();
+      _firebaseSyncService = FirebaseSyncService();
+      _startupPolicyService = StartupPolicyService();
+    }
 
     final repo = InventoryStorage.localRepo();
 
@@ -138,8 +155,19 @@ class _InventoryAppState extends State<InventoryApp> {
     });
 
     try {
+      if (!widget.firebaseEnabled) {
+        await _loadInitialData();
+        await _initializeAuthGate();
+
+        if (!mounted) return;
+        setState(() {
+          _dataReady = true;
+        });
+        return;
+      }
+
       final packageInfo = await PackageInfo.fromPlatform();
-      final startupPolicy = await _startupPolicyService.check(
+      final startupPolicy = await _startupPolicyService!.check(
         currentVersion: packageInfo.version,
       );
 
@@ -151,7 +179,7 @@ class _InventoryAppState extends State<InventoryApp> {
         return;
       }
 
-      await _firebaseSyncService.replaceLocalWithFirestore();
+      await _firebaseSyncService!.replaceLocalWithFirestore();
       await _loadInitialData();
       await _initializeAuthGate();
 
@@ -249,6 +277,17 @@ class _InventoryAppState extends State<InventoryApp> {
   }
 
   Future<void> _initializeAuthGate() async {
+    if (!widget.firebaseEnabled) {
+      if (!mounted) return;
+      setState(() {
+        _rememberedUsername = 'desktop-offline';
+        _authReady = true;
+        _isLoggedIn = true;
+        _currentRole = AppRole.admin;
+      });
+      return;
+    }
+
     if (_disableLoginGate) {
       if (!mounted) return;
       setState(() {
@@ -261,7 +300,7 @@ class _InventoryAppState extends State<InventoryApp> {
     }
 
     _rememberedUsername = _authSessionService.getRememberedUsername();
-    await _firebaseAuthService.signOut();
+    await _firebaseAuthService!.signOut();
     if (!mounted) return;
     setState(() {
       _authReady = true;
@@ -282,7 +321,9 @@ class _InventoryAppState extends State<InventoryApp> {
   }
 
   Future<void> _onLogout() async {
-    await _firebaseAuthService.signOut();
+    if (widget.firebaseEnabled) {
+      await _firebaseAuthService!.signOut();
+    }
     if (!mounted) return;
     setState(() {
       _isLoggedIn = false;
@@ -401,7 +442,7 @@ class _InventoryAppState extends State<InventoryApp> {
           ? colorScheme.primary
           : colorScheme.error;
       return MaterialApp(
-        title: 'bnm',
+        title: 'ZhyShi Inventory System',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
@@ -494,7 +535,7 @@ class _InventoryAppState extends State<InventoryApp> {
     if (_startupError != null) {
       final colorScheme = _themeFromSelection().colorScheme;
       return MaterialApp(
-        title: 'bnm',
+        title: 'ZhyShi Inventory System',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
@@ -554,7 +595,7 @@ class _InventoryAppState extends State<InventoryApp> {
 
     if (!_dataReady || !_authReady) {
       return MaterialApp(
-        title: 'bnm',
+        title: 'ZhyShi Inventory System',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
@@ -564,12 +605,12 @@ class _InventoryAppState extends State<InventoryApp> {
 
     if (!_isLoggedIn) {
       return MaterialApp(
-        title: 'bnm',
+        title: 'ZhyShi Inventory System',
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: _scaffoldMessengerKey,
         theme: _themeFromSelection(),
         home: LoginPage(
-          authService: _firebaseAuthService,
+          authService: _firebaseAuthService!,
           rememberedUsername: _rememberedUsername,
           showAppBar: false,
           onLoginSuccess: (profile) async {
@@ -582,7 +623,7 @@ class _InventoryAppState extends State<InventoryApp> {
     }
 
     return MaterialApp(
-      title: 'bnm',
+      title: 'ZhyShi Inventory System',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: _scaffoldMessengerKey,
       theme: _themeFromSelection(),

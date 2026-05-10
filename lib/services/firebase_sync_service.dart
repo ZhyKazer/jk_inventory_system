@@ -44,7 +44,7 @@ class FirebaseSyncService {
       _storage =
           storage ??
           FirebaseStorage.instanceFor(
-            bucket: 'gs://bnm-inventory.firebasestorage.app',
+            bucket: 'gs://zhyshi-inventory-system.firebasestorage.app',
           );
 
   final FirebaseFirestore _firestore;
